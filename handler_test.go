@@ -1,10 +1,13 @@
 package starlark
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strings"
@@ -598,6 +601,133 @@ func TestUrlencodeListValues(t *testing.T) {
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/u.star", "", nil))
 	if w.Body.String() != "x=1&x=2&x=3&y=z" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+// makeMultipart builds a multipart/form-data body. fields are
+// (name, value) pairs; files are (name, filename, content) triples.
+func makeMultipart(t *testing.T, fields [][2]string, files [][3]string) (string, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for _, f := range fields {
+		if err := mw.WriteField(f[0], f[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range files {
+		fw, err := mw.CreateFormFile(f[0], f[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte(f[2])); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String(), mw.FormDataContentType()
+}
+
+func TestFilesSingle(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `
+def respond(req):
+    f = req.files.get("upload")
+    return f.filename + "|" + str(f.size) + "|" + str(f.read())
+`)
+	body, ct := makeMultipart(t, nil, [][3]string{{"upload", "hi.txt", "hello world"}})
+	headers := http.Header{}
+	headers.Set("Content-Type", ct)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("POST", "/u.star", body, headers))
+	if !strings.HasPrefix(w.Body.String(), "hi.txt|11|") {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "hello world") {
+		t.Errorf("missing payload: %q", w.Body.String())
+	}
+}
+
+func TestFilesMultiple(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `
+def respond(req):
+    fs = req.files.getlist("doc")
+    parts = [f.filename + "=" + str(f.read()) for f in fs]
+    return "|".join(parts)
+`)
+	body, ct := makeMultipart(t, nil, [][3]string{
+		{"doc", "a.txt", "AAA"},
+		{"doc", "b.txt", "BBB"},
+	})
+	headers := http.Header{}
+	headers.Set("Content-Type", ct)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("POST", "/u.star", body, headers))
+	got := w.Body.String()
+	if !strings.Contains(got, "a.txt=") || !strings.Contains(got, "AAA") ||
+		!strings.Contains(got, "b.txt=") || !strings.Contains(got, "BBB") {
+		t.Fatalf("body = %q", got)
+	}
+}
+
+func TestFilesAndFormFields(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `
+def respond(req):
+    f = req.files.get("avatar")
+    return req.form.get("name", "?") + ":" + f.filename + ":" + str(f.read())
+`)
+	body, ct := makeMultipart(t,
+		[][2]string{{"name", "alice"}},
+		[][3]string{{"avatar", "a.png", "PNGDATA"}})
+	headers := http.Header{}
+	headers.Set("Content-Type", ct)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("POST", "/u.star", body, headers))
+	if !strings.Contains(w.Body.String(), "alice:a.png:") || !strings.Contains(w.Body.String(), "PNGDATA") {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestFilesEmptyOnNonMultipart(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `def respond(req): return str(len(req.files))`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/u.star", "", nil))
+	if w.Body.String() != "0" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestFilesContentType(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `def respond(req): return req.files.get("f").content_type`)
+	// Manually craft so we can set the part's Content-Type.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	hdr := make(textproto.MIMEHeader)
+	hdr.Set("Content-Disposition", `form-data; name="f"; filename="x.json"`)
+	hdr.Set("Content-Type", "application/json")
+	pw, err := mw.CreatePart(hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw.Write([]byte(`{}`))
+	mw.Close()
+	headers := http.Header{}
+	headers.Set("Content-Type", mw.FormDataContentType())
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("POST", "/u.star", buf.String(), headers))
+	if w.Body.String() != "application/json" {
 		t.Fatalf("body = %q", w.Body.String())
 	}
 }

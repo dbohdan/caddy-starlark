@@ -39,9 +39,18 @@ type Request struct {
 	bodyErr  error
 	formOnce sync.Once
 	form     *multiDict
+
+	multipartOnce sync.Once
+	multipartErr  error
+	files         *filesDict
+	multipartForm *multiDict // form fields parsed from multipart parts
+
+	maxBodySize int64
 }
 
 func newRequestValue(r *http.Request) *Request { return &Request{r: r} }
+
+func (req *Request) setLimits(maxBody int64) { req.maxBodySize = maxBody }
 
 func (req *Request) String() string        { return fmt.Sprintf("<Request %s %s>", req.r.Method, req.r.URL.Path) }
 func (req *Request) Type() string          { return "Request" }
@@ -60,15 +69,22 @@ func (req *Request) readBody() ([]byte, error) {
 	return req.body, req.bodyErr
 }
 
-func (req *Request) parsedForm() *multiDict {
+func (req *Request) parsedForm() (*multiDict, error) {
+	ct := req.r.Header.Get("Content-Type")
+	mediaType := ct
+	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+		mediaType = strings.TrimSpace(mediaType[:i])
+	}
+	if mediaType == "multipart/form-data" {
+		if err := req.parseMultipart(); err != nil {
+			return nil, err
+		}
+		return req.multipartForm, nil
+	}
 	req.formOnce.Do(func() {
 		body, _ := req.readBody()
-		ct := req.r.Header.Get("Content-Type")
-		if i := strings.IndexByte(ct, ';'); i >= 0 {
-			ct = strings.TrimSpace(ct[:i])
-		}
 		md := newMultiDict()
-		if ct == "application/x-www-form-urlencoded" {
+		if mediaType == "application/x-www-form-urlencoded" {
 			if vals, err := url.ParseQuery(string(body)); err == nil {
 				for k, vs := range vals {
 					for _, v := range vs {
@@ -79,7 +95,52 @@ func (req *Request) parsedForm() *multiDict {
 		}
 		req.form = md
 	})
-	return req.form
+	return req.form, nil
+}
+
+const multipartMemoryCap = 32 << 20 // 32 MiB
+
+func (req *Request) parseMultipart() error {
+	req.multipartOnce.Do(func() {
+		ct := req.r.Header.Get("Content-Type")
+		mediaType := ct
+		if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+			mediaType = strings.TrimSpace(mediaType[:i])
+		}
+		if mediaType != "multipart/form-data" {
+			// Not a multipart request: expose empty files / form rather
+			// than surfacing ParseMultipartForm's content-type error.
+			req.multipartForm = newMultiDict()
+			req.files = newFilesDict()
+			return
+		}
+		maxMem := int64(multipartMemoryCap)
+		if req.maxBodySize > 0 && req.maxBodySize < maxMem {
+			maxMem = req.maxBodySize
+		}
+		if err := req.r.ParseMultipartForm(maxMem); err != nil {
+			req.multipartErr = err
+			return
+		}
+		mf := req.r.MultipartForm
+		fields := newMultiDict()
+		files := newFilesDict()
+		if mf != nil {
+			for k, vs := range mf.Value {
+				for _, v := range vs {
+					fields.add(k, v)
+				}
+			}
+			for k, headers := range mf.File {
+				for _, h := range headers {
+					files.add(k, newFileStorage(k, h))
+				}
+			}
+		}
+		req.multipartForm = fields
+		req.files = files
+	})
+	return req.multipartErr
 }
 
 // Attr exposes the Flask-style fields.
@@ -146,7 +207,19 @@ func (req *Request) Attr(name string) (starlark.Value, error) {
 		}
 		return d, nil
 	case "form":
-		return req.parsedForm(), nil
+		f, err := req.parsedForm()
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
+	case "files":
+		if err := req.parseMultipart(); err != nil {
+			return nil, err
+		}
+		if req.files == nil {
+			return newFilesDict(), nil
+		}
+		return req.files, nil
 	case "values":
 		merged := newMultiDict()
 		for k, vs := range req.r.URL.Query() {
@@ -154,7 +227,11 @@ func (req *Request) Attr(name string) (starlark.Value, error) {
 				merged.add(k, v)
 			}
 		}
-		for _, kv := range req.parsedForm().items {
+		f, err := req.parsedForm()
+		if err != nil {
+			return nil, err
+		}
+		for _, kv := range f.items {
 			merged.add(kv.key, kv.val)
 		}
 		return merged, nil
@@ -178,9 +255,9 @@ func (req *Request) Attr(name string) (starlark.Value, error) {
 
 func (req *Request) AttrNames() []string {
 	return []string{
-		"args", "content_length", "content_type", "cookies", "data", "form",
-		"full_path", "get_header", "headers", "host", "json", "method", "path",
-		"query_string", "remote_addr", "scheme", "url", "values",
+		"args", "content_length", "content_type", "cookies", "data", "files",
+		"form", "full_path", "get_header", "headers", "host", "json", "method",
+		"path", "query_string", "remote_addr", "scheme", "url", "values",
 	}
 }
 

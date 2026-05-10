@@ -185,6 +185,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	req := newRequestValue(r)
+	req.setLimits(h.MaxBodySize)
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 	result, err := starlark.Call(thread, callable, starlark.Tuple{req}, nil)
 	if err != nil {
 		if abortErr, ok := isAbort(err); ok {

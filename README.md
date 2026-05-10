@@ -83,7 +83,8 @@ Inspired by [`flask.request`](https://flask.palletsprojects.com/en/stable/api/#f
 | `request.args`         | `MultiDict` | query parameters                                  |
 | `request.headers`      | `MultiDict` | request headers (case-insensitive)                |
 | `request.cookies`      | `dict`      | cookies                                           |
-| `request.form`         | `MultiDict` | parsed `application/x-www-form-urlencoded` body   |
+| `request.form`         | `MultiDict` | parsed body (`application/x-www-form-urlencoded` or the non-file parts of `multipart/form-data`) |
+| `request.files`        | files dict  | uploaded files (only for `multipart/form-data`)   |
 | `request.values`       | `MultiDict` | `args` + `form` combined                          |
 | `request.data`         | `bytes`     | raw request body                                  |
 | `request.json()`       | function    | parse the body as JSON                            |
@@ -217,6 +218,50 @@ def respond(req):
 Both `"{http.request.uuid}"` and `"http.request.uuid"` work, matching
 the convenience of Caddy's Go-template `placeholder` function.
 
+## File uploads
+
+For `multipart/form-data` requests, `request.files` exposes uploaded
+parts. The container supports `get(name)`, `getlist(name)` (Werkzeug
+style — returns every part for a name), `keys()`, `items()`, iteration,
+`len()`, and `in`.
+
+Each `FileStorage` value has:
+
+| attr               | type   | description                            |
+| ---                | ---    | ---                                    |
+| `file.filename`    | `str`  | client-supplied filename               |
+| `file.content_type`| `str`  | per-part `Content-Type`                |
+| `file.name`        | `str`  | form field name                        |
+| `file.size`        | `int`  | declared size in bytes                 |
+| `file.read()`      | method | returns the entire body as `bytes`     |
+
+Non-file form fields are still available as `request.form`. Example:
+
+```python
+def respond(req):
+    f = req.files.get("avatar")
+    if f == None:
+        abort(400, "missing 'avatar'")
+    note = req.form.get("note", "")
+    return Response(
+        json.encode({
+            "filename": f.filename,
+            "size":     f.size,
+            "note":     note,
+        }),
+        content_type="application/json",
+    )
+```
+
+```sh
+curl -F "avatar=@photo.png" -F "note=hello" http://localhost:8080/api/upload.star
+```
+
+The handler enforces `max_body_size` for multipart bodies too. Files
+above the in-memory threshold (32 MiB or `max_body_size`, whichever is
+smaller) spill to temp files; those are removed automatically when the
+script returns.
+
 ## Limits
 
 The handler caps request bodies at `max_body_size` (default 4 MiB).
@@ -281,6 +326,7 @@ See the [`examples/`](./examples) directory:
 - [`examples/scripts/api/info.star`](./examples/scripts/api/info.star) — placeholder demo
 - [`examples/scripts/api/png.star`](./examples/scripts/api/png.star) — generates a PNG image dynamically (binary response)
 - [`examples/scripts/api/now.star`](./examples/scripts/api/now.star) — current date and time via both placeholders and the `time` module
+- [`examples/scripts/api/upload.star`](./examples/scripts/api/upload.star) — file upload using `request.files`
 
 ## Tests
 
