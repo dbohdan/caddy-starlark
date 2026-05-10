@@ -1,0 +1,12 @@
+{
+	order starlark before file_server
+}
+
+:8080 {
+	route {
+		starlark {
+			root ./examples/scripts
+		}
+		file_server
+	}
+}

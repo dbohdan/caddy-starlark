@@ -1,0 +1,4 @@
+/caddy
+/cmd/caddy/caddy
+*.test
+*.out
