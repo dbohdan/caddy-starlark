@@ -550,6 +550,58 @@ def respond(req):
 	}
 }
 
+func TestQuoteUnquoteRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `
+def respond(req):
+    s = "a b/c?d=&%"
+    q = quote(s)
+    return q + "|" + unquote(q)
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/u.star", "", nil))
+	want := "a%20b/c%3Fd%3D%26%25|a b/c?d=&%"
+	if w.Body.String() != want {
+		t.Fatalf("body = %q, want %q", w.Body.String(), want)
+	}
+}
+
+func TestUrlencodeDict(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `def respond(req): return urlencode({"q": "hello world", "lang": "en"})`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/u.star", "", nil))
+	// url.Values.Encode sorts keys.
+	if w.Body.String() != "lang=en&q=hello+world" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestUrlencodeMultiDict(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `def respond(req): return urlencode(req.args)`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/u.star?x=1&x=2&y=hello+world", "", nil))
+	// Sorted by key, with space → +.
+	if w.Body.String() != "x=1&x=2&y=hello+world" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestUrlencodeListValues(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "u.star", `def respond(req): return urlencode({"x": [1, 2, 3], "y": "z"})`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/u.star", "", nil))
+	if w.Body.String() != "x=1&x=2&x=3&y=z" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
 func TestMissingEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, "broken.star", `x = 1`)

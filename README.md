@@ -140,6 +140,9 @@ Call `set_cookie` more than once to send multiple cookies.
 | `escape(value)`           | HTML-escape `& < > " '`, returning `markup` (already-`markup` values pass through) |
 | `markup(value)`           | wrap a value as already-safe HTML (returns `markup`)       |
 | `html(template, **kwargs)` | format a template, escaping each kwarg unless it's `markup`; returns `markup` |
+| `quote(s, safe="/")`      | percent-encode unreserved chars (`A-Za-z0-9_.-~` plus `safe`); matches Python's `urllib.parse.quote` |
+| `unquote(s)`              | decode `%XX` escapes; does **not** treat `+` as space (matches Python's `unquote`) |
+| `urlencode(mapping)`      | build a query-string from a `dict` or `MultiDict`; uses form encoding (space → `+`); list/tuple values produce repeated keys |
 | `placeholder(key, default="")` | resolve a [Caddy placeholder](https://caddyserver.com/docs/conventions#placeholders); accepts `"{...}"` or bare key; alias `ph` |
 | `json`                    | starlark-go's [`json`](https://github.com/google/starlark-go/blob/master/starlarkjson/json.go) module (`json.encode`, `json.decode`, `json.indent`) |
 | `time`                    | starlark-go's `time` module                                |
@@ -189,6 +192,20 @@ escapes `user` exactly once.
 
 These helpers are not autoescape — raw string concatenation of
 untrusted input remains a footgun. Reach for `html(...)` first.
+
+## URL encoding
+
+Three helpers mirror `urllib.parse`:
+
+```python
+quote("a b/c?d=&%")           # → "a%20b/c%3Fd%3D%26%25"  (keeps "/")
+quote("a/b", safe="")         # → "a%2Fb"
+unquote("a%20b%2Fc")          # → "a b/c"  (does not treat "+" as space)
+urlencode({"q": "hello world", "lang": "en"})
+                              # → "lang=en&q=hello+world"  (form encoding)
+urlencode(req.args)           # works on MultiDict; preserves multi-values
+urlencode({"x": [1, 2, 3]})   # → "x=1&x=2&x=3"
+```
 
 ## Caddy placeholders
 

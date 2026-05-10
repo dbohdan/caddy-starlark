@@ -265,6 +265,7 @@ func (h *Handler) loadProgram(scriptPath string) (*starlark.Program, error) {
 		switch name {
 		case "Response", "redirect", "abort", "placeholder", "ph",
 			"escape", "markup", "html",
+			"quote", "unquote", "urlencode",
 			"json", "time", "math", "struct":
 			return true
 		}
@@ -311,6 +312,9 @@ func buildPredeclaredNoRepl() starlark.StringDict {
 		"escape":   starlark.NewBuiltin("escape", escapeBuiltin),
 		"markup":   starlark.NewBuiltin("markup", markupBuiltin),
 		"html":     starlark.NewBuiltin("html", htmlBuiltin),
+		"quote":    starlark.NewBuiltin("quote", quoteBuiltin),
+		"unquote":  starlark.NewBuiltin("unquote", unquoteBuiltin),
+		"urlencode": starlark.NewBuiltin("urlencode", urlencodeBuiltin),
 		"json":     starlarkjson.Module,
 		"time":     startime.Module,
 		"math":     math.Module,
