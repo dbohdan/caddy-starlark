@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
+	startime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 )
 
@@ -17,10 +20,11 @@ import (
 //	Response("hi", status=200, headers={"X-Foo": "bar"})
 //	Response(body=b"\x00\x01", status=200, content_type="application/octet-stream")
 type Response struct {
-	Body        starlark.Value // String or Bytes
+	Body        starlark.Value // String, Bytes, or Markup
 	Status      int
 	Headers     *starlark.Dict
 	ContentType string
+	Cookies     []*http.Cookie
 }
 
 func (r *Response) String() string {
@@ -39,10 +43,99 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.MakeInt(r.Status), nil
 	case "headers":
 		return r.Headers, nil
+	case "set_cookie":
+		return starlark.NewBuiltin("set_cookie", r.setCookieBuiltin), nil
 	}
 	return nil, nil
 }
-func (r *Response) AttrNames() []string { return []string{"body", "status", "headers"} }
+func (r *Response) AttrNames() []string {
+	return []string{"body", "headers", "set_cookie", "status"}
+}
+
+// setCookieBuiltin implements Flask-style set_cookie on a Response.
+//
+//	resp.set_cookie(name, value,
+//	                max_age=None, expires=None,
+//	                path=None, domain=None,
+//	                secure=False, httponly=False,
+//	                samesite=None)
+func (r *Response) setCookieBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		name     string
+		value    string
+		maxAge   starlark.Value = starlark.None
+		expires  starlark.Value = starlark.None
+		path     starlark.Value = starlark.None
+		domain   starlark.Value = starlark.None
+		secure   bool
+		httpOnly bool
+		samesite starlark.Value = starlark.None
+	)
+	if err := starlark.UnpackArgs("set_cookie", args, kwargs,
+		"name", &name,
+		"value", &value,
+		"max_age?", &maxAge,
+		"expires?", &expires,
+		"path?", &path,
+		"domain?", &domain,
+		"secure?", &secure,
+		"httponly?", &httpOnly,
+		"samesite?", &samesite,
+	); err != nil {
+		return nil, err
+	}
+
+	c := &http.Cookie{Name: name, Value: value, Secure: secure, HttpOnly: httpOnly}
+
+	if maxAge != starlark.None {
+		n, err := starlark.AsInt32(maxAge)
+		if err != nil {
+			return nil, fmt.Errorf("set_cookie: max_age must be int: %w", err)
+		}
+		c.MaxAge = n
+	}
+	if expires != starlark.None {
+		switch e := expires.(type) {
+		case startime.Time:
+			c.Expires = time.Time(e)
+		default:
+			return nil, fmt.Errorf("set_cookie: expires must be a time value, got %s", expires.Type())
+		}
+	}
+	if path != starlark.None {
+		s, ok := path.(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("set_cookie: path must be a string")
+		}
+		c.Path = string(s)
+	}
+	if domain != starlark.None {
+		s, ok := domain.(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("set_cookie: domain must be a string")
+		}
+		c.Domain = string(s)
+	}
+	if samesite != starlark.None {
+		s, ok := samesite.(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("set_cookie: samesite must be a string")
+		}
+		switch strings.ToLower(string(s)) {
+		case "lax":
+			c.SameSite = http.SameSiteLaxMode
+		case "strict":
+			c.SameSite = http.SameSiteStrictMode
+		case "none":
+			c.SameSite = http.SameSiteNoneMode
+		default:
+			return nil, fmt.Errorf("set_cookie: samesite must be 'lax', 'strict', or 'none'")
+		}
+	}
+
+	r.Cookies = append(r.Cookies, c)
+	return starlark.None, nil
+}
 
 func responseBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var body starlark.Value = starlark.String("")
@@ -202,6 +295,9 @@ func writeResponse(w http.ResponseWriter, v starlark.Value) error {
 		default:
 			w.Header().Set(string(ks), val.String())
 		}
+	}
+	for _, c := range resp.Cookies {
+		http.SetCookie(w, c)
 	}
 	if resp.ContentType != "" {
 		w.Header().Set("Content-Type", resp.ContentType)

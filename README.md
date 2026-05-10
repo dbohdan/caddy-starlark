@@ -109,6 +109,27 @@ def respond(req):
     return None                                          # 204
 ```
 
+## Cookies
+
+`request.cookies` reads incoming cookies as a `dict[str, str]`. To
+*set* cookies on the response, call `set_cookie` on a `Response` object:
+
+```python
+def respond(req):
+    r = Response("logged in")
+    r.set_cookie(
+        "sid", "abc123",
+        max_age=3600,         # seconds; or expires=time.from_timestamp(n)
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="strict",    # "lax" | "strict" | "none"
+    )
+    return r
+```
+
+Call `set_cookie` more than once to send multiple cookies.
+
 ## Globals available inside scripts
 
 | name                      | description                                                |

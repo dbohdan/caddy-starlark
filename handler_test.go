@@ -467,6 +467,89 @@ def respond(req):
 	}
 }
 
+func TestSetCookieSimple(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "c.star", `
+def respond(req):
+    r = Response("ok")
+    r.set_cookie("sid", "abc123")
+    return r
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/c.star", "", nil))
+	if got := w.Header().Get("Set-Cookie"); got != "sid=abc123" {
+		t.Fatalf("Set-Cookie = %q", got)
+	}
+}
+
+func TestSetCookieAttributes(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "c.star", `
+def respond(req):
+    r = Response("ok")
+    r.set_cookie("sid", "abc",
+                 max_age=3600,
+                 path="/app",
+                 domain="example.com",
+                 secure=True,
+                 httponly=True,
+                 samesite="strict")
+    return r
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/c.star", "", nil))
+	got := w.Header().Get("Set-Cookie")
+	for _, want := range []string{"sid=abc", "Max-Age=3600", "Path=/app",
+		"Domain=example.com", "HttpOnly", "Secure", "SameSite=Strict"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Set-Cookie %q missing %q", got, want)
+		}
+	}
+}
+
+func TestSetCookieMultiple(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "c.star", `
+def respond(req):
+    r = Response("ok")
+    r.set_cookie("a", "1")
+    r.set_cookie("b", "2", samesite="lax")
+    return r
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/c.star", "", nil))
+	cookies := w.Header()["Set-Cookie"]
+	if len(cookies) != 2 {
+		t.Fatalf("got %d Set-Cookie headers, want 2: %v", len(cookies), cookies)
+	}
+	if cookies[0] != "a=1" {
+		t.Errorf("cookies[0] = %q", cookies[0])
+	}
+	if !strings.Contains(cookies[1], "b=2") || !strings.Contains(cookies[1], "SameSite=Lax") {
+		t.Errorf("cookies[1] = %q", cookies[1])
+	}
+}
+
+func TestSetCookieExpires(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "c.star", `
+def respond(req):
+    r = Response("ok")
+    r.set_cookie("sid", "abc", expires=time.from_timestamp(0))
+    return r
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/c.star", "", nil))
+	got := w.Header().Get("Set-Cookie")
+	if !strings.Contains(got, "Expires=Thu, 01 Jan 1970") {
+		t.Fatalf("Set-Cookie %q missing Expires=Thu, 01 Jan 1970", got)
+	}
+}
+
 func TestMissingEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, "broken.star", `x = 1`)
