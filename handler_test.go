@@ -389,6 +389,84 @@ func TestMaxBodySizeUnlimited(t *testing.T) {
 	}
 }
 
+func TestEscapeAllChars(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "e.star", `def respond(req): return escape("<a href=\"x\">'&'</a>")`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/e.star", "", nil))
+	want := "&lt;a href=&#34;x&#34;&gt;&#39;&amp;&#39;&lt;/a&gt;"
+	if w.Body.String() != want {
+		t.Fatalf("body = %q, want %q", w.Body.String(), want)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q", ct)
+	}
+}
+
+func TestEscapeIdempotentOnMarkup(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "e.star", `def respond(req): return escape(escape("<x>"))`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/e.star", "", nil))
+	if w.Body.String() != "&lt;x&gt;" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestHtmlFormatter(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "h.star", `
+def respond(req):
+    return html(
+        "<p>Hello, {name}! You said: {msg}</p>",
+        name=req.args.get("name", ""),
+        msg=req.args.get("msg", ""),
+    )
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/h.star?name=<script>alert(1)</script>&msg=A%26B", "", nil))
+	want := "<p>Hello, &lt;script&gt;alert(1)&lt;/script&gt;! You said: A&amp;B</p>"
+	if w.Body.String() != want {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestHtmlPassesMarkupThrough(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "h.star", `
+def respond(req):
+    safe = markup("<b>bold</b>")
+    user = "<i>italic</i>"
+    return html("<p>{safe} vs {user}</p>", safe=safe, user=user)
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/h.star", "", nil))
+	want := "<p><b>bold</b> vs &lt;i&gt;italic&lt;/i&gt;</p>"
+	if w.Body.String() != want {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestHtmlComposes(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "h.star", `
+def respond(req):
+    inner = html("<p>{x}</p>", x="<a>")
+    return html("<div>{i}</div>", i=inner)
+`)
+	h, next := newHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/h.star", "", nil))
+	want := "<div><p>&lt;a&gt;</p></div>"
+	if w.Body.String() != want {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
 func TestMissingEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, "broken.star", `x = 1`)

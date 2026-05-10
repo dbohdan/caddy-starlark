@@ -58,12 +58,12 @@ func responseBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tupl
 		return nil, err
 	}
 	switch body.(type) {
-	case starlark.String, starlark.Bytes:
+	case starlark.String, starlark.Bytes, Markup:
 		// ok
 	case starlark.NoneType:
 		body = starlark.String("")
 	default:
-		return nil, fmt.Errorf("Response: body must be string, bytes, or None")
+		return nil, fmt.Errorf("Response: body must be string, bytes, markup, or None")
 	}
 	if headers == nil {
 		headers = starlark.NewDict(0)
@@ -213,6 +213,11 @@ func writeResponse(w http.ResponseWriter, v starlark.Value) error {
 		if w.Header().Get("Content-Type") == "" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		}
+	case Markup:
+		body = []byte(b)
+		if w.Header().Get("Content-Type") == "" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		}
 	case starlark.Bytes:
 		body = []byte(b)
 		if w.Header().Get("Content-Type") == "" {
@@ -233,6 +238,8 @@ func coerceResponse(v starlark.Value) (*Response, error) {
 		return x, nil
 	case starlark.String:
 		return &Response{Body: x, Status: 200, Headers: starlark.NewDict(0)}, nil
+	case Markup:
+		return &Response{Body: x, Status: 200, Headers: starlark.NewDict(0)}, nil
 	case starlark.Bytes:
 		return &Response{Body: x, Status: 200, Headers: starlark.NewDict(0)}, nil
 	case starlark.NoneType:
@@ -251,10 +258,10 @@ func coerceTuple(t starlark.Tuple) (*Response, error) {
 	}
 	resp := &Response{Status: 200, Headers: starlark.NewDict(0)}
 	switch b := t[0].(type) {
-	case starlark.String, starlark.Bytes:
+	case starlark.String, starlark.Bytes, Markup:
 		resp.Body = b
 	default:
-		return nil, fmt.Errorf("first tuple element must be string or bytes, got %s", t[0].Type())
+		return nil, fmt.Errorf("first tuple element must be string, bytes, or markup, got %s", t[0].Type())
 	}
 	if len(t) >= 2 {
 		s, err := starlark.AsInt32(t[1])
@@ -284,10 +291,10 @@ func coerceDict(d *starlark.Dict) (*Response, error) {
 		switch string(ks) {
 		case "body":
 			switch b := v.(type) {
-			case starlark.String, starlark.Bytes:
+			case starlark.String, starlark.Bytes, Markup:
 				resp.Body = b
 			default:
-				return nil, fmt.Errorf("body must be string or bytes")
+				return nil, fmt.Errorf("body must be string, bytes, or markup")
 			}
 		case "status":
 			s, err := starlark.AsInt32(v)

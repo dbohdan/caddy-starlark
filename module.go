@@ -264,6 +264,7 @@ func (h *Handler) loadProgram(scriptPath string) (*starlark.Program, error) {
 		// Predeclared identifiers — anything in buildPredeclared.
 		switch name {
 		case "Response", "redirect", "abort", "placeholder", "ph",
+			"escape", "markup", "html",
 			"json", "time", "math", "struct":
 			return true
 		}
@@ -307,6 +308,9 @@ func buildPredeclaredNoRepl() starlark.StringDict {
 		"Response": starlark.NewBuiltin("Response", responseBuiltin),
 		"redirect": starlark.NewBuiltin("redirect", redirectBuiltin),
 		"abort":    starlark.NewBuiltin("abort", abortBuiltin),
+		"escape":   starlark.NewBuiltin("escape", escapeBuiltin),
+		"markup":   starlark.NewBuiltin("markup", markupBuiltin),
+		"html":     starlark.NewBuiltin("html", htmlBuiltin),
 		"json":     starlarkjson.Module,
 		"time":     startime.Module,
 		"math":     math.Module,

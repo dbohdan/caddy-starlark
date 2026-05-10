@@ -116,11 +116,58 @@ def respond(req):
 | `Response(...)`           | response constructor                                       |
 | `redirect(url, status=302)` | shorthand for a redirect response                        |
 | `abort(status, message="")` | terminate with a Caddy HTTP error                        |
+| `escape(value)`           | HTML-escape `& < > " '`, returning `markup` (already-`markup` values pass through) |
+| `markup(value)`           | wrap a value as already-safe HTML (returns `markup`)       |
+| `html(template, **kwargs)` | format a template, escaping each kwarg unless it's `markup`; returns `markup` |
 | `placeholder(key, default="")` | resolve a [Caddy placeholder](https://caddyserver.com/docs/conventions#placeholders); accepts `"{...}"` or bare key; alias `ph` |
 | `json`                    | starlark-go's [`json`](https://github.com/google/starlark-go/blob/master/starlarkjson/json.go) module (`json.encode`, `json.decode`, `json.indent`) |
 | `time`                    | starlark-go's `time` module                                |
 | `math`                    | starlark-go's `math` module                                |
 | `struct`                  | starlark-go's `struct` constructor                         |
+
+## HTML escaping
+
+Returning a string defaults `Content-Type` to `text/html; charset=utf-8`,
+so any user input you interpolate into a response needs to be escaped to
+avoid XSS. The recommended idiom is the `html(...)` formatter:
+
+```python
+def respond(req):
+    return html(
+        "<p>Hello, {name}! You said: {msg}</p>",
+        name=req.args.get("name", ""),
+        msg=req.args.get("msg", ""),
+    )
+```
+
+`html()` escapes each kwarg, so the request
+`/?name=<script>alert(1)</script>` produces
+`<p>Hello, &lt;script&gt;alert(1)&lt;/script&gt;! ...</p>`.
+
+If you need to pass already-trusted HTML through, wrap it with
+`markup()`:
+
+```python
+def respond(req):
+    nav = markup("<nav>…</nav>")
+    return html("<header>{nav}</header><main>{body}</main>",
+                nav=nav, body=req.args.get("body", ""))
+```
+
+`escape(value)` does the same escaping outside of templates and is
+idempotent on `markup` values:
+
+```python
+def respond(req):
+    return "Hello, " + escape(req.args.get("name", "")) + "!"
+```
+
+`html()` returns a `markup` value, so calls compose without
+double-escaping: `html("<div>{x}</div>", x=html("<p>{y}</p>", y=user))`
+escapes `user` exactly once.
+
+These helpers are not autoescape — raw string concatenation of
+untrusted input remains a footgun. Reach for `html(...)` first.
 
 ## Caddy placeholders
 
