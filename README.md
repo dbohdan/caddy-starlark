@@ -131,6 +131,48 @@ def respond(req):
 Both `"{http.request.uuid}"` and `"http.request.uuid"` work, matching
 the convenience of Caddy's Go-template `placeholder` function.
 
+## Date and time
+
+Caddy exposes the current time as placeholders, so they're available
+through `placeholder()`:
+
+| placeholder            | example                                  |
+| ---                    | ---                                      |
+| `time.now.http`        | `Sun, 10 May 2026 21:40:29 GMT`          |
+| `time.now.common_log`  | `10/May/2026:21:40:29 +0000`             |
+| `time.now.year`        | `2026`                                   |
+| `time.now.unix`        | `1778449229`                             |
+| `time.now.unix_ms`     | `1778449229950`                          |
+| `time.now`             | `2026-05-10 21:40:29.95 +0000 UTC ...`   |
+
+`time.now.year`, `time.now.unix`, and `time.now.unix_ms` come back as
+numeric strings — wrap them in `int(...)` if you want an integer.
+The bare `time.now` placeholder stringifies a Go `time.Time` value,
+which includes a monotonic-clock reading (`m=+...`) — fine for logging,
+less useful for parsing. Prefer the formatted variants for display.
+
+For arithmetic or formatting, use the `time` module global instead
+(it's starlark-go's [`lib/time`](https://github.com/google/starlark-go/blob/master/lib/time/time.go)):
+
+```python
+def respond(req):
+    t = time.now()
+    return Response(
+        json.encode({
+            "iso":  t.format("2006-01-02T15:04:05Z07:00"),
+            "year": t.year,
+            "unix": t.unix,
+            "vilnius": t.in_location("Europe/Vilnius").format("15:04 -0700"),
+        }),
+        content_type="application/json",
+    )
+```
+
+A `time` value supports `.year`, `.month`, `.day`, `.hour`, `.minute`,
+`.second`, `.nanosecond`, `.unix`, `.unix_nano`, `.format(layout)`, and
+`.in_location(tz)`. It also participates in arithmetic with
+`time.parse_duration("5m")` and friends.
+
 ## A complete example
 
 See the [`examples/`](./examples) directory:
@@ -140,6 +182,7 @@ See the [`examples/`](./examples) directory:
 - [`examples/scripts/api/echo.star`](./examples/scripts/api/echo.star) — JSON echo endpoint
 - [`examples/scripts/api/info.star`](./examples/scripts/api/info.star) — placeholder demo
 - [`examples/scripts/api/png.star`](./examples/scripts/api/png.star) — generates a PNG image dynamically (binary response)
+- [`examples/scripts/api/now.star`](./examples/scripts/api/now.star) — current date and time via both placeholders and the `time` module
 
 ## Tests
 
