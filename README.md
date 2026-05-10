@@ -95,6 +95,27 @@ Inspired by [`flask.request`](https://flask.palletsprojects.com/en/stable/api/#f
 `getlist(key)` returns all values. It also has `get`, `keys`, `values`,
 `items`, and `to_dict`.
 
+## Redirects
+
+`redirect(location, status=302)` builds a `Location:` response. **The
+URL is sent verbatim** — passing user input directly is an open-redirect
+vulnerability:
+
+```python
+# DANGEROUS — attacker controls the destination via ?next=//evil.com
+return redirect(req.args.get("next", "/"))
+```
+
+If you need a "next" parameter, validate it first (e.g., require a
+leading `/` and forbid `//` to keep it relative to your site):
+
+```python
+nxt = req.args.get("next", "/")
+if not nxt.startswith("/") or nxt.startswith("//"):
+    nxt = "/"
+return redirect(nxt)
+```
+
 ## Response shapes
 
 The entrypoint may return any of the following — also Flask-style:
@@ -195,6 +216,18 @@ escapes `user` exactly once.
 These helpers are not autoescape — raw string concatenation of
 untrusted input remains a footgun. Reach for `html(...)` first.
 
+`escape()` covers HTML element bodies and quoted attribute values
+(both single- and double-quoted). It is **not** sufficient for other
+contexts:
+
+- Inside `<script>` tags, escape with JSON encoding (`json.encode(x)`)
+  rather than `escape(x)`.
+- Inside `<style>` blocks or `style="..."` attributes, neither helper
+  is safe — don't interpolate untrusted input there.
+- Inside `href="..."` or `src="..."` URLs, use `quote()` for the path
+  component or `urlencode()` for query strings, then `escape()` the
+  result for the attribute.
+
 ## URL encoding
 
 Three helpers mirror `urllib.parse`:
@@ -255,6 +288,20 @@ base64-encoded JSON, readable by anyone who has it. Don't store
 secrets in it. For real auth, layer on the
 [`caddy-security`](https://github.com/greenpau/caddy-security) plugin
 or run an upstream auth service via `forward_auth`.
+
+The `Secure` flag is set when `r.TLS != nil` — i.e., when this Caddy
+instance terminated the TLS connection itself. **If Caddy sits behind
+another TLS terminator** (a CDN, a load balancer, another reverse
+proxy) and gets plaintext from upstream, the flag will not be set even
+though the user's connection is HTTPS. In that deployment, configure
+Caddy's [`trusted_proxies`](https://caddyserver.com/docs/caddyfile/options#trusted-proxies)
+and put a [`header`](https://caddyserver.com/docs/caddyfile/directives/header)
+directive in front of `starlark` to add `Secure` to the
+`Set-Cookie`, or set `secret_key` only on HTTPS-only sites.
+
+A `secret_key` shorter than 32 bytes is accepted but produces a Warn-
+level log on startup; use a 32+ byte random value (e.g.,
+`openssl rand -base64 32`).
 
 | Caddyfile option       | default     | notes                                |
 | ---                    | ---         | ---                                  |
