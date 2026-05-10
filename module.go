@@ -71,6 +71,13 @@ type Handler struct {
 	// Set to a negative value to disable the cap.
 	MaxBodySize int64 `json:"max_body_size,omitempty"`
 
+	// SecretKey enables signed-cookie sessions when non-empty. Used to
+	// sign and verify the session cookie's contents (HMAC-SHA256).
+	SecretKey string `json:"secret_key,omitempty"`
+
+	// SessionCookieName overrides the default "session" cookie name.
+	SessionCookieName string `json:"session_cookie_name,omitempty"`
+
 	logger *zap.Logger
 	cache  *programCache
 }
@@ -117,6 +124,9 @@ func (h *Handler) Provision(ctx caddy.Context) error {
 	}
 	if h.MaxBodySize == 0 {
 		h.MaxBodySize = DefaultMaxBodySize
+	}
+	if h.SessionCookieName == "" {
+		h.SessionCookieName = "session"
 	}
 	h.cache = &programCache{m: make(map[string]cachedProgram)}
 	return nil
@@ -186,6 +196,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 
 	req := newRequestValue(r)
 	req.setLimits(h.MaxBodySize)
+	if h.SecretKey != "" {
+		req.configureSessions(thread, h.SessionCookieName, []byte(h.SecretKey))
+	}
 	defer func() {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()
@@ -204,6 +217,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 			zap.String("script", scriptPath),
 			zap.Error(err))
 		return caddyhttp.Error(http.StatusInternalServerError, err)
+	}
+
+	if req.sessionData != nil {
+		if err := writeSessionCookie(w, r, thread, h.SessionCookieName,
+			[]byte(h.SecretKey), req.sessionOriginal, req.sessionData); err != nil {
+			h.logger.Error("session write error",
+				zap.String("script", scriptPath),
+				zap.Error(err))
+			return caddyhttp.Error(http.StatusInternalServerError, err)
+		}
 	}
 
 	return writeResponse(w, result)
@@ -362,6 +385,14 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 				}
 			case "index":
 				if !h.Args(&hand.Index) {
+					return nil, h.ArgErr()
+				}
+			case "secret_key":
+				if !h.Args(&hand.SecretKey) {
+					return nil, h.ArgErr()
+				}
+			case "session_cookie_name":
+				if !h.Args(&hand.SessionCookieName) {
 					return nil, h.ArgErr()
 				}
 			case "max_body_size":

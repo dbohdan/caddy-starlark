@@ -15,6 +15,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"go.starlark.net/starlark"
 	"go.uber.org/zap"
 )
 
@@ -729,6 +730,157 @@ func TestFilesContentType(t *testing.T) {
 		makeRequest("POST", "/u.star", buf.String(), headers))
 	if w.Body.String() != "application/json" {
 		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+// extractSessionCookie pulls the session cookie value from a recorded
+// response, or returns "" if there isn't one.
+func extractSessionCookie(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "session" {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+func newSessionHandler(t *testing.T, dir string) (*Handler, *passThroughCounter) {
+	t.Helper()
+	h, p := newHandler(t, dir)
+	h.SecretKey = "test-secret-key-32-bytes-long-xxx"
+	return h, p
+}
+
+func TestSessionUnconfiguredErrors(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "s.star", `def respond(req): return str(req.session)`)
+	h, next := newHandler(t, dir) // no secret_key
+	w := httptest.NewRecorder()
+	err := h.ServeHTTP(w, makeRequest("GET", "/s.star", "", nil), caddyhttp.HandlerFunc(next.ServeHTTP))
+	if err == nil {
+		t.Fatalf("expected error, got nil; body=%q", w.Body.String())
+	}
+	if !strings.Contains(err.Error(), "sessions are not configured") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestSessionEmptyDoesNotSetCookie(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "s.star", `
+def respond(req):
+    _ = req.session  # touch but don't modify
+    return "ok"
+`)
+	h, next := newSessionHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/s.star", "", nil))
+	if got := extractSessionCookie(t, w); got != "" {
+		t.Fatalf("unexpected Set-Cookie session = %q", got)
+	}
+}
+
+func TestSessionWriteSetsCookie(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "s.star", `
+def respond(req):
+    req.session["user"] = "alice"
+    req.session["count"] = 1
+    return "set"
+`)
+	h, next := newSessionHandler(t, dir)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/s.star", "", nil))
+	cookie := extractSessionCookie(t, w)
+	if cookie == "" {
+		t.Fatalf("no session cookie set; headers=%v", w.Header())
+	}
+	if !strings.Contains(cookie, ".") {
+		t.Fatalf("cookie %q missing signature", cookie)
+	}
+	// Cookie attributes
+	raw := w.Header().Get("Set-Cookie")
+	for _, want := range []string{"HttpOnly", "SameSite=Lax", "Path=/"} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("Set-Cookie %q missing %q", raw, want)
+		}
+	}
+}
+
+func TestSessionRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "s.star", `
+def respond(req):
+    if "name" not in req.session:
+        req.session["name"] = req.args.get("set", "")
+        return "set:" + req.session["name"]
+    return "have:" + req.session["name"]
+`)
+	h, next := newSessionHandler(t, dir)
+
+	// First request: set the session.
+	w1 := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/s.star?set=alice", "", nil))
+	if w1.Body.String() != "set:alice" {
+		t.Fatalf("first body = %q", w1.Body.String())
+	}
+	cookie := extractSessionCookie(t, w1)
+	if cookie == "" {
+		t.Fatal("no session cookie after first request")
+	}
+
+	// Second request: send the cookie back, expect to read the session.
+	headers := http.Header{}
+	headers.Set("Cookie", "session="+cookie)
+	w2 := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/s.star", "", headers))
+	if w2.Body.String() != "have:alice" {
+		t.Fatalf("second body = %q", w2.Body.String())
+	}
+	// And no Set-Cookie this time, since session wasn't modified.
+	if got := extractSessionCookie(t, w2); got != "" {
+		t.Errorf("unexpected Set-Cookie on unchanged session: %q", got)
+	}
+}
+
+func TestSessionTamperedRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "s.star", `def respond(req): return "name=" + str(req.session.get("name", "none"))`)
+	h, next := newSessionHandler(t, dir)
+	headers := http.Header{}
+	// Forged cookie: valid base64, wrong signature.
+	headers.Set("Cookie", "session=eyJuYW1lIjoiZXZpbCJ9.xxxxxxxx")
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/s.star", "", headers))
+	if w.Body.String() != "name=none" {
+		t.Fatalf("body = %q (tampered cookie should not load)", w.Body.String())
+	}
+}
+
+func TestSessionClearDeletesCookie(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "s.star", `
+def respond(req):
+    req.session.clear()
+    return "cleared"
+`)
+	h, next := newSessionHandler(t, dir)
+	// Provide an existing session so clear() actually has something to remove.
+	thread := &starlark.Thread{Name: "test"}
+	d := starlark.NewDict(0)
+	_ = d.SetKey(starlark.String("user"), starlark.String("alice"))
+	encoded, err := encodeSession(thread, d, []byte(h.SecretKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := http.Header{}
+	headers.Set("Cookie", "session="+encoded)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("GET", "/s.star", "", headers))
+	raw := w.Header().Get("Set-Cookie")
+	if !strings.Contains(raw, "Max-Age=0") && !strings.Contains(raw, "Expires=") {
+		t.Fatalf("expected delete cookie, got %q", raw)
 	}
 }
 

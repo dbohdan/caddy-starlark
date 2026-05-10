@@ -46,11 +46,28 @@ type Request struct {
 	multipartForm *multiDict // form fields parsed from multipart parts
 
 	maxBodySize int64
+
+	// Session state, populated lazily on first access to request.session.
+	sessionOnce      sync.Once
+	sessionErr       error
+	sessionData      *starlark.Dict // current; user mutates this
+	sessionOriginal  *starlark.Dict // snapshot of decoded cookie (read-only after init)
+	sessionThread    *starlark.Thread
+	sessionSecret    []byte
+	sessionCookieKey string
 }
 
 func newRequestValue(r *http.Request) *Request { return &Request{r: r} }
 
 func (req *Request) setLimits(maxBody int64) { req.maxBodySize = maxBody }
+
+// configureSessions enables request.session access. secret nil/empty
+// disables sessions: any access raises an error.
+func (req *Request) configureSessions(thread *starlark.Thread, cookieName string, secret []byte) {
+	req.sessionThread = thread
+	req.sessionCookieKey = cookieName
+	req.sessionSecret = secret
+}
 
 func (req *Request) String() string        { return fmt.Sprintf("<Request %s %s>", req.r.Method, req.r.URL.Path) }
 func (req *Request) Type() string          { return "Request" }
@@ -245,6 +262,8 @@ func (req *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.MakeInt64(req.r.ContentLength), nil
 	case "content_type":
 		return starlark.String(req.r.Header.Get("Content-Type")), nil
+	case "session":
+		return req.session()
 	case "json":
 		return starlark.NewBuiltin("json", req.jsonBuiltin), nil
 	case "get_header":
@@ -257,8 +276,37 @@ func (req *Request) AttrNames() []string {
 	return []string{
 		"args", "content_length", "content_type", "cookies", "data", "files",
 		"form", "full_path", "get_header", "headers", "host", "json", "method",
-		"path", "query_string", "remote_addr", "scheme", "url", "values",
+		"path", "query_string", "remote_addr", "scheme", "session", "url", "values",
 	}
+}
+
+// session returns the live, mutable Starlark dict for the request session.
+// It's an error if sessions weren't configured (no secret_key set).
+func (req *Request) session() (starlark.Value, error) {
+	req.sessionOnce.Do(func() {
+		if len(req.sessionSecret) == 0 {
+			req.sessionErr = fmt.Errorf("sessions are not configured (set secret_key in the Caddyfile)")
+			return
+		}
+		current := starlark.NewDict(0)
+		if c, err := req.r.Cookie(req.sessionCookieKey); err == nil {
+			if decoded, _ := decodeSession(req.sessionThread, c.Value, req.sessionSecret); decoded != nil {
+				current = decoded
+			}
+		}
+		req.sessionData = current
+		// Snapshot the original by deep-copying via JSON round-trip,
+		// so later comparison sees only what changed.
+		if js, err := dictToJSON(req.sessionThread, current); err == nil {
+			if orig, _ := jsonToDict(req.sessionThread, js); orig != nil {
+				req.sessionOriginal = orig
+			}
+		}
+	})
+	if req.sessionErr != nil {
+		return nil, req.sessionErr
+	}
+	return req.sessionData, nil
 }
 
 func (req *Request) jsonBuiltin(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

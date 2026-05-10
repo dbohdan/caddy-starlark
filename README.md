@@ -83,6 +83,7 @@ Inspired by [`flask.request`](https://flask.palletsprojects.com/en/stable/api/#f
 | `request.args`         | `MultiDict` | query parameters                                  |
 | `request.headers`      | `MultiDict` | request headers (case-insensitive)                |
 | `request.cookies`      | `dict`      | cookies                                           |
+| `request.session`      | `dict`      | signed-cookie session; mutate to persist (requires `secret_key`) |
 | `request.form`         | `MultiDict` | parsed body (`application/x-www-form-urlencoded` or the non-file parts of `multipart/form-data`) |
 | `request.files`        | files dict  | uploaded files (only for `multipart/form-data`)   |
 | `request.values`       | `MultiDict` | `args` + `form` combined                          |
@@ -218,6 +219,48 @@ def respond(req):
 Both `"{http.request.uuid}"` and `"http.request.uuid"` work, matching
 the convenience of Caddy's Go-template `placeholder` function.
 
+## Sessions (signed cookies)
+
+`request.session` is a Flask-style signed-cookie session: an ordinary
+`dict` decoded from a single cookie that the handler signs with
+HMAC-SHA256. There's no server-side storage to manage.
+
+Enable it with a `secret_key` in the Caddyfile (32+ bytes recommended):
+
+```Caddyfile
+starlark {
+    root        ./scripts
+    secret_key  {env.STARLARK_SECRET_KEY}
+}
+```
+
+In a script:
+
+```python
+def respond(req):
+    n = req.session.get("count", 0) + 1
+    req.session["count"] = n
+    return "Visit #" + str(n)
+```
+
+The handler snapshots the session at first access. After the script
+returns, if the dict has changed, the session cookie is re-issued
+(`Set-Cookie: session=…; Path=/; HttpOnly; SameSite=Lax`, plus
+`Secure` automatically on HTTPS). Calling `req.session.clear()` on a
+non-empty session sends a delete cookie. Tampered or unsigned
+cookies are silently treated as a fresh empty session.
+
+This is **integrity, not confidentiality** — the cookie is
+base64-encoded JSON, readable by anyone who has it. Don't store
+secrets in it. For real auth, layer on the
+[`caddy-security`](https://github.com/greenpau/caddy-security) plugin
+or run an upstream auth service via `forward_auth`.
+
+| Caddyfile option       | default     | notes                                |
+| ---                    | ---         | ---                                  |
+| `secret_key <str>`     | (none)      | enables sessions; HMAC-SHA256 key    |
+| `session_cookie_name`  | `session`   | cookie name                          |
+
 ## File uploads
 
 For `multipart/form-data` requests, `request.files` exposes uploaded
@@ -327,6 +370,7 @@ See the [`examples/`](./examples) directory:
 - [`examples/scripts/api/png.star`](./examples/scripts/api/png.star) — generates a PNG image dynamically (binary response)
 - [`examples/scripts/api/now.star`](./examples/scripts/api/now.star) — current date and time via both placeholders and the `time` module
 - [`examples/scripts/api/upload.star`](./examples/scripts/api/upload.star) — file upload using `request.files`
+- [`examples/scripts/api/counter.star`](./examples/scripts/api/counter.star) — per-visitor visit counter using a signed-cookie session
 
 ## Tests
 
