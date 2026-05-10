@@ -139,6 +139,7 @@ See the [`examples/`](./examples) directory:
 - [`examples/scripts/index.star`](./examples/scripts/index.star) — HTML home page
 - [`examples/scripts/api/echo.star`](./examples/scripts/api/echo.star) — JSON echo endpoint
 - [`examples/scripts/api/info.star`](./examples/scripts/api/info.star) — placeholder demo
+- [`examples/scripts/api/png.star`](./examples/scripts/api/png.star) — generates a PNG image dynamically (binary response)
 
 ## Tests
 
