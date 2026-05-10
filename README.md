@@ -35,11 +35,12 @@ go run ./cmd/caddy run --config examples/Caddyfile --adapter caddyfile
 
 :8080 {
     starlark {
-        root         ./scripts        # directory of .star files
-        extension    .star            # extension to recognize (default .star)
-        entrypoint   respond          # function to call (default respond)
-        index        index.star       # script for `/` requests
+        root          ./scripts       # directory of .star files
+        extension     .star           # extension to recognize (default .star)
+        entrypoint    respond         # function to call (default respond)
+        index         index.star      # script for `/` requests
         cache_scripts true            # cache parsed programs by mtime
+        max_body_size 4MB             # request body cap (default 4MiB; "unlimited" disables)
     }
 }
 ```
@@ -130,6 +131,18 @@ def respond(req):
 
 Both `"{http.request.uuid}"` and `"http.request.uuid"` work, matching
 the convenience of Caddy's Go-template `placeholder` function.
+
+## Limits
+
+The handler caps request bodies at `max_body_size` (default 4 MiB).
+Reads beyond the limit (`request.data`, `request.json()`, `request.form`)
+fail and the response becomes HTTP 413. Set `max_body_size unlimited`
+to disable the cap.
+
+If you'd rather configure the cap globally, Caddy's built-in
+[`request_body`](https://caddyserver.com/docs/caddyfile/directives/request_body)
+directive works just as well — set `max_body_size unlimited` here and
+let `request_body` enforce it.
 
 ## Date and time
 

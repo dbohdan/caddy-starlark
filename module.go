@@ -6,6 +6,7 @@
 package starlark
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/dustin/go-humanize"
 	"go.starlark.net/lib/math"
 	startime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
@@ -26,6 +28,9 @@ import (
 	"go.starlark.net/starlarkstruct"
 	"go.uber.org/zap"
 )
+
+// DefaultMaxBodySize is the request-body cap used when none is configured.
+const DefaultMaxBodySize int64 = 4 << 20 // 4 MiB
 
 func init() {
 	caddy.RegisterModule(Handler{})
@@ -60,6 +65,11 @@ type Handler struct {
 	// CacheScripts caches parsed scripts in memory keyed by absolute
 	// path and modification time. Default true.
 	CacheScripts *bool `json:"cache_scripts,omitempty"`
+
+	// MaxBodySize caps the request body in bytes. Reads beyond this
+	// limit fail and the handler returns HTTP 413. Defaults to 4 MiB.
+	// Set to a negative value to disable the cap.
+	MaxBodySize int64 `json:"max_body_size,omitempty"`
 
 	logger *zap.Logger
 	cache  *programCache
@@ -105,6 +115,9 @@ func (h *Handler) Provision(ctx caddy.Context) error {
 		t := true
 		h.CacheScripts = &t
 	}
+	if h.MaxBodySize == 0 {
+		h.MaxBodySize = DefaultMaxBodySize
+	}
 	h.cache = &programCache{m: make(map[string]cachedProgram)}
 	return nil
 }
@@ -136,6 +149,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 			zap.String("script", scriptPath),
 			zap.Error(err))
 		return caddyhttp.Error(http.StatusInternalServerError, err)
+	}
+
+	if h.MaxBodySize > 0 && r.Body != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, h.MaxBodySize)
 	}
 
 	thread := &starlark.Thread{
@@ -172,6 +189,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if err != nil {
 		if abortErr, ok := isAbort(err); ok {
 			return caddyhttp.Error(abortErr.status, abortErr)
+		}
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return caddyhttp.Error(http.StatusRequestEntityTooLarge, err)
 		}
 		h.logger.Error("starlark execution error",
 			zap.String("script", scriptPath),
@@ -328,6 +349,20 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 			case "index":
 				if !h.Args(&hand.Index) {
 					return nil, h.ArgErr()
+				}
+			case "max_body_size":
+				var sizeStr string
+				if !h.Args(&sizeStr) {
+					return nil, h.ArgErr()
+				}
+				if strings.EqualFold(sizeStr, "unlimited") || sizeStr == "-1" {
+					hand.MaxBodySize = -1
+				} else {
+					n, err := humanize.ParseBytes(sizeStr)
+					if err != nil {
+						return nil, h.Errf("parsing max_body_size: %v", err)
+					}
+					hand.MaxBodySize = int64(n)
 				}
 			case "cache_scripts":
 				var v string

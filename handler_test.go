@@ -340,6 +340,55 @@ func TestCaching(t *testing.T) {
 	}
 }
 
+func TestMaxBodySizeDefault(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
+	h, next := newHandler(t, dir)
+	// 1 KiB POST: well under default 4 MiB.
+	body := strings.Repeat("a", 1024)
+	headers := http.Header{}
+	headers.Set("Content-Type", "text/plain")
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
+		makeRequest("POST", "/b.star", body, headers))
+	if w.Body.String() != "1024" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
+func TestMaxBodySizeExceeded(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
+	h, next := newHandler(t, dir)
+	h.MaxBodySize = 16
+	headers := http.Header{}
+	headers.Set("Content-Type", "text/plain")
+	r := makeRequest("POST", "/b.star", strings.Repeat("a", 64), headers)
+	w := httptest.NewRecorder()
+	err := h.ServeHTTP(w, r, caddyhttp.HandlerFunc(next.ServeHTTP))
+	he, ok := err.(caddyhttp.HandlerError)
+	if !ok {
+		t.Fatalf("expected HandlerError, got %T %v", err, err)
+	}
+	if he.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", he.StatusCode)
+	}
+}
+
+func TestMaxBodySizeUnlimited(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
+	h, next := newHandler(t, dir)
+	h.MaxBodySize = -1
+	headers := http.Header{}
+	headers.Set("Content-Type", "text/plain")
+	body := strings.Repeat("a", 8<<20) // 8 MiB, larger than default 4 MiB
+	r := makeRequest("POST", "/b.star", body, headers)
+	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), r)
+	if w.Body.String() != "8388608" {
+		t.Fatalf("body = %q", w.Body.String())
+	}
+}
+
 func TestMissingEntrypoint(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, "broken.star", `x = 1`)
