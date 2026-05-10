@@ -158,6 +158,9 @@ func responseBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tupl
 	default:
 		return nil, fmt.Errorf("Response: body must be string, bytes, markup, or None")
 	}
+	if err := validStatus(status); err != nil {
+		return nil, fmt.Errorf("Response: %w", err)
+	}
 	if headers == nil {
 		headers = starlark.NewDict(0)
 	}
@@ -178,6 +181,9 @@ func redirectBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tupl
 	); err != nil {
 		return nil, err
 	}
+	if err := validStatus(status); err != nil {
+		return nil, fmt.Errorf("redirect: %w", err)
+	}
 	headers := starlark.NewDict(1)
 	_ = headers.SetKey(starlark.String("Location"), starlark.String(location))
 	return &Response{
@@ -185,6 +191,15 @@ func redirectBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tupl
 		Status:  status,
 		Headers: headers,
 	}, nil
+}
+
+// validStatus rejects values outside [100, 999] before they reach
+// http.ResponseWriter.WriteHeader, which panics on out-of-range codes.
+func validStatus(code int) error {
+	if code < 100 || code > 999 {
+		return fmt.Errorf("HTTP status %d out of range [100, 999]", code)
+	}
+	return nil
 }
 
 // abortError flows up through starlark.Call as a regular error and is then
@@ -364,6 +379,9 @@ func coerceTuple(t starlark.Tuple) (*Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("status must be int: %w", err)
 		}
+		if err := validStatus(s); err != nil {
+			return nil, err
+		}
 		resp.Status = s
 	}
 	if len(t) == 3 {
@@ -395,6 +413,9 @@ func coerceDict(d *starlark.Dict) (*Response, error) {
 		case "status":
 			s, err := starlark.AsInt32(v)
 			if err != nil {
+				return nil, err
+			}
+			if err := validStatus(s); err != nil {
 				return nil, err
 			}
 			resp.Status = s

@@ -128,6 +128,10 @@ func (h *Handler) Provision(ctx caddy.Context) error {
 	if h.SessionCookieName == "" {
 		h.SessionCookieName = "session"
 	}
+	if h.SecretKey != "" && len(h.SecretKey) < 32 {
+		h.logger.Warn("secret_key is shorter than 32 bytes; HMAC-SHA256 is meaningfully weaker with short keys",
+			zap.Int("length", len(h.SecretKey)))
+	}
 	h.cache = &programCache{m: make(map[string]cachedProgram)}
 	return nil
 }
@@ -229,7 +233,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		}
 	}
 
-	return writeResponse(w, result)
+	if err := writeResponse(w, result); err != nil {
+		return caddyhttp.Error(http.StatusInternalServerError, err)
+	}
+	return nil
 }
 
 // resolveScript maps a URL path to a .star file under root. It returns
@@ -313,16 +320,29 @@ func (h *Handler) loadProgram(scriptPath string) (*starlark.Program, error) {
 }
 
 // makeLoader implements relative `load("foo.star", ...)` from the script's
-// own directory. It does not cache; users wanting caching can split scripts
-// into separate top-level routes.
+// own directory. Loaded paths are confined to baseDir so that a script
+// can't escape via "../" segments. It does not cache; users wanting
+// caching can split scripts into separate top-level routes.
 func makeLoader(baseDir string) func(*starlark.Thread, string) (starlark.StringDict, error) {
 	return func(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 		full := filepath.Join(baseDir, filepath.FromSlash(module))
-		src, err := os.ReadFile(full)
+		absBase, err := filepath.Abs(baseDir)
 		if err != nil {
 			return nil, err
 		}
-		return starlark.ExecFile(thread, full, src, buildPredeclaredNoRepl())
+		absFull, err := filepath.Abs(full)
+		if err != nil {
+			return nil, err
+		}
+		rel, err := filepath.Rel(absBase, absFull)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return nil, fmt.Errorf("load: path %q escapes script root", module)
+		}
+		src, err := os.ReadFile(absFull)
+		if err != nil {
+			return nil, err
+		}
+		return starlark.ExecFile(thread, absFull, src, buildPredeclaredNoRepl())
 	}
 }
 
