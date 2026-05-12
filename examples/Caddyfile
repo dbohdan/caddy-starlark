@@ -6,6 +6,8 @@
 	route {
 		starlark {
 			root ./examples/scripts
+			# Never use this value in production.
+			secret_key 8ktd0Znpg4F0PqhIEnTOi0wdBBvRnFyM
 		}
 		file_server
 	}
