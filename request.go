@@ -13,7 +13,7 @@ import (
 	"go.starlark.net/starlarkjson"
 )
 
-// Request is the Starlark value passed to the script's entrypoint. The
+// Request is the Starlark value passed to the script's entry point. The
 // surface mirrors flask.request:
 //
 //	request.method        - HTTP method

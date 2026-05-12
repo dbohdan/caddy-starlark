@@ -41,7 +41,7 @@ func init() {
 //
 // For each request, the handler resolves the request path against Root
 // (using the configured Extension to fill in a default file extension),
-// parses the script, and calls a top-level Entrypoint function (default
+// parses the script, and calls a top-level EntryPoint function (default
 // "respond") with a Flask-style request object. The function's return
 // value becomes the HTTP response.
 type Handler struct {
@@ -54,9 +54,9 @@ type Handler struct {
 	// through to the next handler). Default ".star".
 	Extension string `json:"extension,omitempty"`
 
-	// Entrypoint is the name of the top-level function called per request.
+	// EntryPoint is the name of the top-level function called per request.
 	// Default "respond".
-	Entrypoint string `json:"entrypoint,omitempty"`
+	EntryPoint string `json:"entry_point,omitempty"`
 
 	// Index is the script name resolved when the path ends in "/".
 	// Default "index.star".
@@ -112,8 +112,8 @@ func (h *Handler) Provision(ctx caddy.Context) error {
 	if !strings.HasPrefix(h.Extension, ".") {
 		h.Extension = "." + h.Extension
 	}
-	if h.Entrypoint == "" {
-		h.Entrypoint = "respond"
+	if h.EntryPoint == "" {
+		h.EntryPoint = "respond"
 	}
 	if h.Index == "" {
 		h.Index = "index" + h.Extension
@@ -138,8 +138,8 @@ func (h *Handler) Provision(ctx caddy.Context) error {
 
 // Validate ensures the configuration is sane.
 func (h *Handler) Validate() error {
-	if strings.ContainsRune(h.Entrypoint, '/') {
-		return fmt.Errorf("entrypoint must be a bare identifier")
+	if strings.ContainsRune(h.EntryPoint, '/') {
+		return fmt.Errorf("entry_point must be a bare identifier")
 	}
 	return nil
 }
@@ -187,15 +187,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 	globals.Freeze()
 
-	entry, ok := globals[h.Entrypoint]
+	entry, ok := globals[h.EntryPoint]
 	if !ok {
 		return caddyhttp.Error(http.StatusInternalServerError,
-			fmt.Errorf("%s does not define %q", scriptPath, h.Entrypoint))
+			fmt.Errorf("%s does not define %q", scriptPath, h.EntryPoint))
 	}
 	callable, ok := entry.(starlark.Callable)
 	if !ok {
 		return caddyhttp.Error(http.StatusInternalServerError,
-			fmt.Errorf("%s: %q is not callable", scriptPath, h.Entrypoint))
+			fmt.Errorf("%s: %q is not callable", scriptPath, h.EntryPoint))
 	}
 
 	req := newRequestValue(r)
@@ -376,7 +376,7 @@ func buildPredeclaredNoRepl() starlark.StringDict {
 //	starlark [<matcher>] {
 //	    root <path>
 //	    extension <ext>
-//	    entrypoint <name>
+//	    entry_point <name>
 //	    index <filename>
 //	    cache_scripts <true|false>
 //	}
@@ -399,8 +399,8 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 				if !h.Args(&hand.Extension) {
 					return nil, h.ArgErr()
 				}
-			case "entrypoint":
-				if !h.Args(&hand.Entrypoint) {
+			case "entry_point":
+				if !h.Args(&hand.EntryPoint) {
 					return nil, h.ArgErr()
 				}
 			case "index":

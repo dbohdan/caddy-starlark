@@ -36,9 +36,9 @@ go run ./cmd/caddy run --config examples/Caddyfile --adapter caddyfile
 :8080 {
     starlark {
         root          ./scripts       # directory of .star files
-        extension     .star           # extension to recognize (default .star)
-        entrypoint    respond         # function to call (default respond)
-        index         index.star      # script for `/` requests
+        extension     .star           # extension to recognize (default ".star")
+        entry_point   respond         # function to call (default "respond")
+        index         index.star      # script for "/" requests
         cache_scripts true            # cache parsed programs by mtime
         max_body_size 4MB             # request body cap (default 4MiB; "unlimited" disables)
     }
