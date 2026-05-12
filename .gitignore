@@ -1,4 +1,6 @@
+/attic/
 /caddy
 /cmd/caddy/caddy
 *.test
 *.out
+*.sw*
