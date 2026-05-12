@@ -15,12 +15,12 @@ import (
 // happens explicitly via escape() / html(), keeping the rules predictable.
 type Markup string
 
-func (m Markup) String() string             { return string(m) }
-func (m Markup) Type() string               { return "markup" }
-func (m Markup) Freeze()                    {}
-func (m Markup) Truth() starlark.Bool       { return starlark.Bool(len(m) > 0) }
-func (m Markup) Hash() (uint32, error)      { return starlark.String(m).Hash() }
-func (m Markup) Len() int                   { return len(m) }
+func (m Markup) String() string        { return string(m) }
+func (m Markup) Type() string          { return "markup" }
+func (m Markup) Freeze()               {}
+func (m Markup) Truth() starlark.Bool  { return starlark.Bool(len(m) > 0) }
+func (m Markup) Hash() (uint32, error) { return starlark.String(m).Hash() }
+func (m Markup) Len() int              { return len(m) }
 
 func (m Markup) Attr(name string) (starlark.Value, error) {
 	switch name {

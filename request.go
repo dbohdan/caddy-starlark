@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	starlarkjson "go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkjson"
 )
 
 // Request is the Starlark value passed to the script's entry point. The
@@ -69,7 +69,9 @@ func (req *Request) configureSessions(thread *starlark.Thread, cookieName string
 	req.sessionSecret = secret
 }
 
-func (req *Request) String() string        { return fmt.Sprintf("<Request %s %s>", req.r.Method, req.r.URL.Path) }
+func (req *Request) String() string {
+	return fmt.Sprintf("<Request %s %s>", req.r.Method, req.r.URL.Path)
+}
 func (req *Request) Type() string          { return "Request" }
 func (req *Request) Freeze()               {}
 func (req *Request) Truth() starlark.Bool  { return starlark.True }

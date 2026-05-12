@@ -724,8 +724,12 @@ func TestFilesContentType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pw.Write([]byte(`{}`))
-	mw.Close()
+	if _, err := pw.Write([]byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	headers := http.Header{}
 	headers.Set("Content-Type", mw.FormDataContentType())
 	h, next := newHandler(t, dir)

@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	starlarkjson "go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkjson"
 )
 
 // Session cookie format: "<b64-payload>.<b64-mac>", URL-safe base64

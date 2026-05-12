@@ -12,7 +12,7 @@ import (
 // the unreserved set [A-Za-z0-9_.-~] plus the characters in `safe`
 // untouched and percent-encodes everything else.
 func quoteBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var s, safe string = "", "/"
+	var s, safe = "", "/"
 	if err := starlark.UnpackPositionalArgs("quote", args, kwargs, 1, &s, &safe); err != nil {
 		return nil, err
 	}

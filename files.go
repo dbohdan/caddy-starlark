@@ -62,8 +62,10 @@ func (f *FileStorage) readBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args 
 	if err != nil {
 		return nil, fmt.Errorf("opening %q: %w", f.header.Filename, err)
 	}
-	defer rc.Close()
 	data, err := io.ReadAll(rc)
+	if closeErr := rc.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return nil, fmt.Errorf("reading %q: %w", f.header.Filename, err)
 	}

@@ -21,11 +21,12 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/dustin/go-humanize"
+	starlarkjson "go.starlark.net/lib/json"
 	"go.starlark.net/lib/math"
-	startime "go.starlark.net/lib/time"
+	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkjson"
 	"go.starlark.net/starlarkstruct"
+	"go.starlark.net/syntax"
 	"go.uber.org/zap"
 )
 
@@ -83,8 +84,8 @@ type Handler struct {
 }
 
 type programCache struct {
-	mu  sync.RWMutex
-	m   map[string]cachedProgram
+	mu sync.RWMutex
+	m  map[string]cachedProgram
 }
 
 type cachedProgram struct {
@@ -296,7 +297,7 @@ func (h *Handler) loadProgram(scriptPath string) (*starlark.Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, prog, err := starlark.SourceProgram(scriptPath, src, func(name string) bool {
+	_, prog, err := starlark.SourceProgramOptions(&syntax.FileOptions{}, scriptPath, src, func(name string) bool {
 		// Predeclared identifiers — anything in buildPredeclared.
 		switch name {
 		case "Response", "redirect", "abort", "placeholder", "ph",
@@ -342,7 +343,7 @@ func makeLoader(baseDir string) func(*starlark.Thread, string) (starlark.StringD
 		if err != nil {
 			return nil, err
 		}
-		return starlark.ExecFile(thread, absFull, src, buildPredeclaredNoRepl())
+		return starlark.ExecFileOptions(&syntax.FileOptions{}, thread, absFull, src, buildPredeclaredNoRepl())
 	}
 }
 
@@ -355,19 +356,19 @@ func buildPredeclared(repl *caddy.Replacer) starlark.StringDict {
 
 func buildPredeclaredNoRepl() starlark.StringDict {
 	return starlark.StringDict{
-		"Response": starlark.NewBuiltin("Response", responseBuiltin),
-		"redirect": starlark.NewBuiltin("redirect", redirectBuiltin),
-		"abort":    starlark.NewBuiltin("abort", abortBuiltin),
-		"escape":   starlark.NewBuiltin("escape", escapeBuiltin),
-		"markup":   starlark.NewBuiltin("markup", markupBuiltin),
-		"html":     starlark.NewBuiltin("html", htmlBuiltin),
-		"quote":    starlark.NewBuiltin("quote", quoteBuiltin),
-		"unquote":  starlark.NewBuiltin("unquote", unquoteBuiltin),
+		"Response":  starlark.NewBuiltin("Response", responseBuiltin),
+		"redirect":  starlark.NewBuiltin("redirect", redirectBuiltin),
+		"abort":     starlark.NewBuiltin("abort", abortBuiltin),
+		"escape":    starlark.NewBuiltin("escape", escapeBuiltin),
+		"markup":    starlark.NewBuiltin("markup", markupBuiltin),
+		"html":      starlark.NewBuiltin("html", htmlBuiltin),
+		"quote":     starlark.NewBuiltin("quote", quoteBuiltin),
+		"unquote":   starlark.NewBuiltin("unquote", unquoteBuiltin),
 		"urlencode": starlark.NewBuiltin("urlencode", urlencodeBuiltin),
-		"json":     starlarkjson.Module,
-		"time":     startime.Module,
-		"math":     math.Module,
-		"struct":   starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"json":      starlarkjson.Module,
+		"time":      starlarktime.Module,
+		"math":      math.Module,
+		"struct":    starlark.NewBuiltin("struct", starlarkstruct.Make),
 	}
 }
 
