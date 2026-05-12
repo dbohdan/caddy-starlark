@@ -402,7 +402,7 @@ func TestEscapeAllChars(t *testing.T) {
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/e.star", "", nil))
-	want := "&lt;a href=&#34;x&#34;&gt;&#39;&amp;&#39;&lt;/a&gt;"
+	want := "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;"
 	if w.Body.String() != want {
 		t.Fatalf("body = %q, want %q", w.Body.String(), want)
 	}

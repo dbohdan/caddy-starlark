@@ -50,7 +50,7 @@ func escapeHTML(s string) string {
 		case '>':
 			b.WriteString("&gt;")
 		case '"':
-			b.WriteString("&#34;")
+			b.WriteString("&quot;")
 		case '\'':
 			b.WriteString("&#39;")
 		default:
