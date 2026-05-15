@@ -36,9 +36,10 @@ def respond(request):
     </ul>
 </body>
 
-</html>""",
+</html>
+""",
         code=code,
         text=text,
         message=message,
         url=request.url,
-    )
+    ), code
