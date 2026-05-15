@@ -10,7 +10,7 @@ def respond(request):
 <html><body>
 <h1>Hello, {name}!</h1>
 <p>You requested <code>{path}</code> over {scheme} from {addr}.</p>
-<p>Try <a href="?name=Caddy">/?name=Caddy</a>, <a href="/api/echo.star">/api/echo</a>, or <a href="/api/info.star">/api/info</a>.</p>
+<p>Try <a href="?name=Caddy">/?name=Caddy</a>, <a href="/echo.star">/echo</a>, or <a href="/info.star">/info</a>.</p>
 </body></html>
 """,
         name=request.args.get("name", "stranger"),

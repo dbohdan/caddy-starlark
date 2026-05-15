@@ -1,8 +1,8 @@
 # Show the current date and time, both via Caddy placeholders and the
 # starlark-go `time` module.
 #
-#   curl http://localhost:8080/api/now.star
-#   curl http://localhost:8080/api/now.star?tz=Europe/Vilnius
+#   curl http://localhost:8080/now.star
+#   curl http://localhost:8080/now.star?tz=Europe/Vilnius
 
 def respond(request):
     tz = request.args.get("tz", "UTC")

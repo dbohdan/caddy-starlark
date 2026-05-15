@@ -1,6 +1,6 @@
 # File upload demo. Try:
 #   echo "hello" > /tmp/up.txt
-#   curl -F "f=@/tmp/up.txt" -F "note=hi there" http://localhost:8080/api/upload.star
+#   curl -F "f=@/tmp/up.txt" -F "note=hi there" http://localhost:8080/upload.star
 
 def respond(request):
     if request.method != "POST":

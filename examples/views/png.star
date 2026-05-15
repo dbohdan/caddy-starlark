@@ -3,7 +3,7 @@
 # Pure Starlark implementation of CRC32, Adler32, and the uncompressed
 # deflate stream — no helpers needed beyond the bytes() builtin.
 #
-#   curl -o square.png 'http://localhost:8080/api/png.star?color=ff8800&size=64'
+#   curl -o square.png 'http://localhost:8080/png.star?color=ff8800&size=64'
 
 # Precomputed CRC32 table (polynomial 0xedb88320).
 # Computed once pergprogram load, since the handler caches parsed programs by mtime.
