@@ -4,7 +4,7 @@
 
 (starlark) {
 	starlark {
-		root examples/handlers
+		root examples/views
 		# Never use this value in production.
 		secret_key 8ktd0Znpg4F0PqhIEnTOi0wdBBvRnFyM
 	}
