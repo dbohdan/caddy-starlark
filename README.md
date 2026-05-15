@@ -24,7 +24,7 @@ xcaddy build --with github.com/dbohdan/caddy-starlark
 Or, for local development, use the bundled `cmd/caddy`:
 
 ```sh
-go run ./cmd/caddy run --config examples/Caddyfile --adapter caddyfile
+go run ./cmd/caddy run --config example/Caddyfile --adapter caddyfile
 ```
 
 ## Caddyfile
@@ -405,18 +405,18 @@ It also can perform arithmetic with durations like `time.parse_duration("5m")`.
 
 ## An example site
 
-The [`examples/`](examples/) directory contains a complete example site.
+The [`example/`](example/) directory contains a complete example site.
 It is used for both documentation and testing.
 
-- [`examples/Caddyfile`](examples/Caddyfile): server config
-- [`examples/views/index.star`](examples/views/index.star): HTML home page
-- [`examples/views/error.star`](examples/views/error.star): error page ported and exhanced from a [template example](https://dbohdan.com/caddy#error-page)
-- [`examples/views/echo.star`](examples/views/echo.star): JSON echo endpoint
-- [`examples/views/info.star`](examples/views/info.star): placeholder demo
-- [`examples/views/png.star`](examples/views/png.star): generates a PNG image dynamically (binary response)
-- [`examples/views/now.star`](examples/views/now.star): current date and time via both placeholders and the `time` module
-- [`examples/views/upload.star`](examples/views/upload.star): file upload using `request.files`
-- [`examples/views/counter.star`](examples/views/counter.star): per-visitor visit counter using a signed-cookie session
+- [`example/Caddyfile`](example/Caddyfile): server config
+- [`example/views/index.star`](example/views/index.star): HTML home page
+- [`example/views/error.star`](example/views/error.star): error page ported and exhanced from a [template example](https://dbohdan.com/caddy#error-page)
+- [`example/views/echo.star`](example/views/echo.star): JSON echo endpoint
+- [`example/views/info.star`](example/views/info.star): placeholder demo
+- [`example/views/png.star`](example/views/png.star): generates a PNG image dynamically (binary response)
+- [`example/views/now.star`](example/views/now.star): current date and time via both placeholders and the `time` module
+- [`example/views/upload.star`](example/views/upload.star): file upload using `request.files`
+- [`example/views/counter.star`](example/views/counter.star): per-visitor visit counter using a signed-cookie session
 
 ## Tests
 

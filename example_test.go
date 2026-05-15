@@ -35,7 +35,7 @@ func makeRequestWithPlaceholders(method, target, body string, headers http.Heade
 }
 
 func TestIndexStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 
 	// Default greeting
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), makeRequest("GET", "/index.star", "", nil))
@@ -57,7 +57,7 @@ func TestIndexStar(t *testing.T) {
 }
 
 func TestErrorStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 
 	// 404 with default message
 	r := makeRequestWithPlaceholders("GET", "/error.star", "", nil, map[string]string{
@@ -94,7 +94,7 @@ func TestErrorStar(t *testing.T) {
 }
 
 func TestUploadStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 
 	// GET returns upload form
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), makeRequest("GET", "/upload.star", "", nil))
@@ -153,7 +153,7 @@ func TestUploadStar(t *testing.T) {
 }
 
 func TestInfoStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), makeRequest("GET", "/info.star", "", nil))
 	if w.Code != 200 {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -176,7 +176,7 @@ func TestInfoStar(t *testing.T) {
 }
 
 func TestCounterStar(t *testing.T) {
-	h, next := newSessionHandler(t, "examples/views")
+	h, next := newSessionHandler(t, "example/views")
 
 	// First visit
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), makeRequest("GET", "/counter.star", "", nil))
@@ -216,7 +216,7 @@ func TestCounterStar(t *testing.T) {
 }
 
 func TestNowStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 
 	// Default timezone
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), makeRequest("GET", "/now.star", "", nil))
@@ -250,7 +250,7 @@ func TestNowStar(t *testing.T) {
 }
 
 func TestPngStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 
 	// Success
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP), makeRequest("GET", "/png.star?size=64&color=ff8800", "", nil))
@@ -292,7 +292,7 @@ func TestPngStar(t *testing.T) {
 }
 
 func TestEchoStar(t *testing.T) {
-	h, next := newHandler(t, "examples/views")
+	h, next := newHandler(t, "example/views")
 
 	// Success: POST JSON
 	headers := http.Header{}

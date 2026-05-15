@@ -1,7 +1,7 @@
 // Standalone Caddy build that includes the starlark handler. Useful for
 // local testing without xcaddy:
 //
-//	go run ./cmd/caddy run --config examples/Caddyfile --adapter caddyfile
+//	go run ./cmd/caddy run --config example/Caddyfile --adapter caddyfile
 package main
 
 import (

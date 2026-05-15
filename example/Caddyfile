@@ -4,7 +4,7 @@
 
 (starlark) {
 	starlark {
-		root examples/views
+		root example/views
 		# Never use this value in production.
 		secret_key 8ktd0Znpg4F0PqhIEnTOi0wdBBvRnFyM
 	}
@@ -13,7 +13,7 @@
 :8080 {
 	log
 
-	root examples/
+	root example/
 	import starlark
 	file_server
 
