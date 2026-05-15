@@ -1,5 +1,10 @@
 # caddy-starlark
 
+> [!WARNING]
+> **[Alpha](https://en.wikipedia.org/wiki/Software_release_life_cycle#Alpha) software.**
+> This project is in early development.
+> Expect bugs and security vulnerabilities.
+
 A [Caddy](https://caddyserver.com/) plugin that serves HTTP responses from views written in Starlark.
 [Starlark](https://github.com/google/starlark-go) is a sandboxed configuration and scripting language.
 The plugin lets you work with Python-like Starlark code instead of Caddy's built-in Go templates.
