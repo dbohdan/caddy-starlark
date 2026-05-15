@@ -1,10 +1,11 @@
 # caddy-starlark
 
-A [Caddy](https://caddyserver.com/) plugin that runs [Starlark](https://github.com/google/starlark-go) scripts as request handlers.
-It lets you use Python-like, sandboxed Starlark code instead of Caddy's built-in Go templates.
+A [Caddy](https://caddyserver.com/) plugin that serves HTTP responses from views written in Starlark.
+[Starlark](https://github.com/google/starlark-go) is a sandboxed configuration and scripting language.
+The plugin lets you work with Python-like Starlark code instead of Caddy's built-in Go templates.
 
-The script API is modeled on **Flask**.
-Each request calls a top-level `respond(request)` function.
+The Starlark API is modeled on [Flask](https://flask.palletsprojects.com/).
+Each request calls a top-level `respond(request)` function in a matching Starlark file.
 The `request` object exposes Flask-style attributes (`method`, `path`, `args`, `headers`, `cookies`, `form`, `json()`, `remote_addr`, ...).
 The return value of the entry-point function becomes the HTTP response.
 
@@ -33,12 +34,12 @@ go run ./cmd/caddy run --config examples/Caddyfile --adapter caddyfile
 
 :8080 {
     starlark {
-        root          ./scripts       # directory of .star files
-        extension     .star           # extension to recognize (default ".star")
-        entry_point   respond         # function to call (default "respond")
-        index         index.star      # script for "/" requests
-        cache_scripts true            # cache parsed programs by mtime
-        max_body_size 4MB             # request body cap (default 4MiB; "unlimited" disables)
+        root            ./views       # directory of ".star" files
+        extension       .star         # extension to recognize (default ".star")
+        entry_point     respond       # function to call (default "respond")
+        index           index.star    # view for "/" requests
+        cache_programs  true          # cache parsed programs by mtime
+        max_body_size   4MB           # request body cap (default 4MiB; "unlimited" disables)
     }
 }
 ```
@@ -48,10 +49,10 @@ A request for `/foo` resolves to `<root>/foo.star`;
 Requests that don't map to an existing `.star` file fall through to the next handler.
 You can layer `starlark` above `file_server` for static assets.
 
-## A first script
+## A first view
 
 ```python
-# scripts/index.star
+# views/index.star
 def respond(request):
     name = request.args.get("name", "World")
     return "Hello, " + name + "!"
@@ -133,7 +134,7 @@ def respond(req):
 ## Cookies
 
 `request.cookies` reads incoming cookies as a `dict[str, str]`.
-To *set* cookies on the response, call `set_cookie` on a `Response` object:
+To _set_ cookies on the response, call `set_cookie` on a `Response` object:
 
 ```python
 def respond(req):
@@ -176,7 +177,7 @@ def respond(request):
     )
 ```
 
-## Globals available inside scripts
+## Globals available to views
 
 | name                           | description                                                                                          |
 | ---                            | ---                                                                                                  |
@@ -272,12 +273,12 @@ Enable sessions with a `secret_key` in the Caddyfile (32+ bytes recommended):
 
 ```Caddyfile
 starlark {
-    root        ./scripts
+    root        ./views
     secret_key  {env.STARLARK_SECRET_KEY}
 }
 ```
 
-In a script:
+In a view:
 
 ```python
 def respond(req):
@@ -287,7 +288,7 @@ def respond(req):
 ```
 
 The handler snapshots the session at first access.
-After the script returns, if the dict has changed, the session cookie is re-issued (`Set-Cookie: session=…; Path=/; HttpOnly; SameSite=Lax`, plus `Secure` automatically on HTTPS).
+After the view returns, if the dict has changed, the session cookie is re-issued (`Set-Cookie: session=…; Path=/; HttpOnly; SameSite=Lax`, plus `Secure` automatically on HTTPS).
 Calling `req.session.clear()` on a non-empty session sends a delete cookie.
 Tampered or unsigned cookies are silently treated as a fresh empty session.
 
@@ -350,7 +351,7 @@ curl -F "avatar=@photo.png" -F "note=hello" http://localhost:8080/api/upload.sta
 ```
 
 The handler enforces `max_body_size` for multipart bodies too.
-Files above the in-memory threshold (32 MiB or `max_body_size`, whichever is smaller) spill to temp files; those are removed automatically when the script returns.
+Files above the in-memory threshold (32 MiB or `max_body_size`, whichever is smaller) spill to temp files; those are removed automatically when the view returns.
 
 ## Limits
 
@@ -405,13 +406,13 @@ It also can perform arithmetic with durations like `time.parse_duration("5m")`.
 See the [`examples/`](./examples) directory:
 
 - [`examples/Caddyfile`](./examples/Caddyfile) — server config
-- [`examples/scripts/index.star`](./examples/scripts/index.star) — HTML home page
-- [`examples/scripts/api/echo.star`](./examples/scripts/api/echo.star) — JSON echo endpoint
-- [`examples/scripts/api/info.star`](./examples/scripts/api/info.star) — placeholder demo
-- [`examples/scripts/api/png.star`](./examples/scripts/api/png.star) — generates a PNG image dynamically (binary response)
-- [`examples/scripts/api/now.star`](./examples/scripts/api/now.star) — current date and time via both placeholders and the `time` module
-- [`examples/scripts/api/upload.star`](./examples/scripts/api/upload.star) — file upload using `request.files`
-- [`examples/scripts/api/counter.star`](./examples/scripts/api/counter.star) — per-visitor visit counter using a signed-cookie session
+- [`examples/views/index.star`](./examples/views/index.star) — HTML home page
+- [`examples/views/api/echo.star`](./examples/views/api/echo.star) — JSON echo endpoint
+- [`examples/views/api/info.star`](./examples/views/api/info.star) — placeholder demo
+- [`examples/views/api/png.star`](./examples/views/api/png.star) — generates a PNG image dynamically (binary response)
+- [`examples/views/api/now.star`](./examples/views/api/now.star) — current date and time via both placeholders and the `time` module
+- [`examples/views/api/upload.star`](./examples/views/api/upload.star) — file upload using `request.files`
+- [`examples/views/api/counter.star`](./examples/views/api/counter.star) — per-visitor visit counter using a signed-cookie session
 
 ## Tests
 

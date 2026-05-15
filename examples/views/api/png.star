@@ -5,8 +5,8 @@
 #
 #   curl -o square.png 'http://localhost:8080/api/png.star?color=ff8800&size=64'
 
-# Precomputed CRC32 table (polynomial 0xedb88320). Computed once per
-# script load, since the handler caches parsed programs by mtime.
+# Precomputed CRC32 table (polynomial 0xedb88320).
+# Computed once pergprogram load, since the handler caches parsed programs by mtime.
 def _make_crc_table():
     table = []
     for n in range(256):

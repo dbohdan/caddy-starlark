@@ -1,5 +1,5 @@
 // Package starlark provides a Caddy HTTP handler that executes Starlark
-// scripts as request handlers. The API exposed inside scripts is modeled
+// program as request handlers. The API exposed inside is modeled
 // on Flask: a top-level respond(request) function is called for each
 // request, and may return a string, a Response, or a (body, status[, headers])
 // tuple.
@@ -38,15 +38,15 @@ func init() {
 	httpcaddyfile.RegisterHandlerDirective("starlark", parseCaddyfile)
 }
 
-// Handler executes Starlark scripts to serve HTTP responses.
+// Handler executes Starlark programs to serve HTTP responses.
 //
 // For each request, the handler resolves the request path against Root
 // (using the configured Extension to fill in a default file extension),
-// parses the script, and calls a top-level EntryPoint function (default
+// parses the program, and calls a top-level EntryPoint function (default
 // "respond") with a Flask-style request object. The function's return
 // value becomes the HTTP response.
 type Handler struct {
-	// Root is the directory containing .star scripts. Caddy placeholders
+	// Root is the directory containing .star files. Caddy placeholders
 	// are expanded. Defaults to "{http.vars.root}" if set, otherwise ".".
 	Root string `json:"root,omitempty"`
 
@@ -59,13 +59,13 @@ type Handler struct {
 	// Default "respond".
 	EntryPoint string `json:"entry_point,omitempty"`
 
-	// Index is the script name resolved when the path ends in "/".
+	// Index is the view name resolved when the path ends in "/".
 	// Default "index.star".
 	Index string `json:"index,omitempty"`
 
-	// CacheScripts caches parsed scripts in memory keyed by absolute
+	// CachePrograms caches parsed programs in memory keyed by absolute
 	// path and modification time. Default true.
-	CacheScripts *bool `json:"cache_scripts,omitempty"`
+	CachePrograms *bool `json:"cache_programs,omitempty"`
 
 	// MaxBodySize caps the request body in bytes. Reads beyond this
 	// limit fail and the handler returns HTTP 413. Defaults to 4 MiB.
@@ -119,9 +119,9 @@ func (h *Handler) Provision(ctx caddy.Context) error {
 	if h.Index == "" {
 		h.Index = "index" + h.Extension
 	}
-	if h.CacheScripts == nil {
+	if h.CachePrograms == nil {
 		t := true
-		h.CacheScripts = &t
+		h.CachePrograms = &t
 	}
 	if h.MaxBodySize == 0 {
 		h.MaxBodySize = DefaultMaxBodySize
@@ -150,7 +150,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	root := repl.ReplaceAll(h.Root, ".")
 
-	scriptPath, err := h.resolveScript(root, r.URL.Path)
+	viewPath, err := h.resolveView(root, r.URL.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return next.ServeHTTP(w, r)
@@ -158,10 +158,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
 
-	prog, err := h.loadProgram(scriptPath)
+	prog, err := h.loadProgram(viewPath)
 	if err != nil {
 		h.logger.Error("starlark parse error",
-			zap.String("script", scriptPath),
+			zap.String("view", viewPath),
 			zap.Error(err))
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
@@ -171,32 +171,32 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	thread := &starlark.Thread{
-		Name: "caddy-starlark:" + scriptPath,
+		Name: "caddy-starlark:" + viewPath,
 		Print: func(_ *starlark.Thread, msg string) {
 			h.logger.Info("starlark print",
-				zap.String("script", scriptPath),
+				zap.String("view", viewPath),
 				zap.String("msg", msg))
 		},
-		Load: makeLoader(filepath.Dir(scriptPath)),
+		Load: makeLoader(filepath.Dir(viewPath)),
 	}
 
 	predeclared := buildPredeclared(repl)
 	globals, err := prog.Init(thread, predeclared)
 	if err != nil {
 		return caddyhttp.Error(http.StatusInternalServerError,
-			fmt.Errorf("initializing %s: %w", scriptPath, err))
+			fmt.Errorf("initializing %s: %w", viewPath, err))
 	}
 	globals.Freeze()
 
 	entry, ok := globals[h.EntryPoint]
 	if !ok {
 		return caddyhttp.Error(http.StatusInternalServerError,
-			fmt.Errorf("%s does not define %q", scriptPath, h.EntryPoint))
+			fmt.Errorf("%s does not define %q", viewPath, h.EntryPoint))
 	}
 	callable, ok := entry.(starlark.Callable)
 	if !ok {
 		return caddyhttp.Error(http.StatusInternalServerError,
-			fmt.Errorf("%s: %q is not callable", scriptPath, h.EntryPoint))
+			fmt.Errorf("%s: %q is not callable", viewPath, h.EntryPoint))
 	}
 
 	req := newRequestValue(r)
@@ -219,7 +219,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 			return caddyhttp.Error(http.StatusRequestEntityTooLarge, err)
 		}
 		h.logger.Error("starlark execution error",
-			zap.String("script", scriptPath),
+			zap.String("view", viewPath),
 			zap.Error(err))
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
@@ -228,7 +228,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		if err := writeSessionCookie(w, r, thread, h.SessionCookieName,
 			[]byte(h.SecretKey), req.sessionOriginal, req.sessionData); err != nil {
 			h.logger.Error("session write error",
-				zap.String("script", scriptPath),
+				zap.String("view", viewPath),
 				zap.Error(err))
 			return caddyhttp.Error(http.StatusInternalServerError, err)
 		}
@@ -240,9 +240,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	return nil
 }
 
-// resolveScript maps a URL path to a .star file under root. It returns
+// resolveView maps a URL path to a .star file under root. It returns
 // fs.ErrNotExist when nothing matches so the request can fall through.
-func (h *Handler) resolveScript(root, urlPath string) (string, error) {
+func (h *Handler) resolveView(root, urlPath string) (string, error) {
 	clean := path.Clean("/" + urlPath)
 	if strings.HasSuffix(urlPath, "/") || urlPath == "" {
 		clean = path.Join(clean, h.Index)
@@ -277,27 +277,27 @@ func (h *Handler) resolveScript(root, urlPath string) (string, error) {
 	return absFull, nil
 }
 
-func (h *Handler) loadProgram(scriptPath string) (*starlark.Program, error) {
-	info, err := os.Stat(scriptPath)
+func (h *Handler) loadProgram(viewPath string) (*starlark.Program, error) {
+	info, err := os.Stat(viewPath)
 	if err != nil {
 		return nil, err
 	}
 	mtime := info.ModTime().UnixNano()
 
-	if h.CacheScripts != nil && *h.CacheScripts {
+	if h.CachePrograms != nil && *h.CachePrograms {
 		h.cache.mu.RLock()
-		cached, ok := h.cache.m[scriptPath]
+		cached, ok := h.cache.m[viewPath]
 		h.cache.mu.RUnlock()
 		if ok && cached.modTime == mtime {
 			return cached.mod, nil
 		}
 	}
 
-	src, err := os.ReadFile(scriptPath)
+	src, err := os.ReadFile(viewPath)
 	if err != nil {
 		return nil, err
 	}
-	_, prog, err := starlark.SourceProgramOptions(&syntax.FileOptions{}, scriptPath, src, func(name string) bool {
+	_, prog, err := starlark.SourceProgramOptions(&syntax.FileOptions{}, viewPath, src, func(name string) bool {
 		// Predeclared identifiers — anything in buildPredeclared.
 		switch name {
 		case "Response", "redirect", "abort", "placeholder", "ph",
@@ -312,18 +312,18 @@ func (h *Handler) loadProgram(scriptPath string) (*starlark.Program, error) {
 		return nil, err
 	}
 
-	if h.CacheScripts != nil && *h.CacheScripts {
+	if h.CachePrograms != nil && *h.CachePrograms {
 		h.cache.mu.Lock()
-		h.cache.m[scriptPath] = cachedProgram{mod: prog, modTime: mtime}
+		h.cache.m[viewPath] = cachedProgram{mod: prog, modTime: mtime}
 		h.cache.mu.Unlock()
 	}
 	return prog, nil
 }
 
-// makeLoader implements relative `load("foo.star", ...)` from the script's
-// own directory. Loaded paths are confined to baseDir so that a script
+// makeLoader implements relative `load("foo.star", ...)` from the view's
+// own directory. Loaded paths are confined to baseDir so that a view
 // can't escape via "../" segments. It does not cache; users wanting
-// caching can split scripts into separate top-level routes.
+// caching can split view into separate top-level routes.
 func makeLoader(baseDir string) func(*starlark.Thread, string) (starlark.StringDict, error) {
 	return func(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 		full := filepath.Join(baseDir, filepath.FromSlash(module))
@@ -337,7 +337,7 @@ func makeLoader(baseDir string) func(*starlark.Thread, string) (starlark.StringD
 		}
 		rel, err := filepath.Rel(absBase, absFull)
 		if err != nil || strings.HasPrefix(rel, "..") {
-			return nil, fmt.Errorf("load: path %q escapes script root", module)
+			return nil, fmt.Errorf("load: path %q escapes view root", module)
 		}
 		src, err := os.ReadFile(absFull)
 		if err != nil {
@@ -379,7 +379,7 @@ func buildPredeclaredNoRepl() starlark.StringDict {
 //	    extension <ext>
 //	    entry_point <name>
 //	    index <filename>
-//	    cache_scripts <true|false>
+//	    cache_programs <true|false>
 //	}
 func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
 	hand := new(Handler)
@@ -430,7 +430,7 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 					}
 					hand.MaxBodySize = int64(n)
 				}
-			case "cache_scripts":
+			case "cache_programs":
 				var v string
 				if !h.Args(&v) {
 					return nil, h.ArgErr()
@@ -438,12 +438,12 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 				switch strings.ToLower(v) {
 				case "true", "on", "yes", "1":
 					t := true
-					hand.CacheScripts = &t
+					hand.CachePrograms = &t
 				case "false", "off", "no", "0":
 					f := false
-					hand.CacheScripts = &f
+					hand.CachePrograms = &f
 				default:
-					return nil, h.Errf("invalid cache_scripts value %q", v)
+					return nil, h.Errf("invalid cache_programs value %q", v)
 				}
 			default:
 				return nil, h.Errf("unknown subdirective %q", h.Val())

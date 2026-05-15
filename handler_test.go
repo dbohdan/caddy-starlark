@@ -42,7 +42,7 @@ func (p *passThroughCounter) ServeHTTP(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func writeScript(t *testing.T, dir, name, src string) {
+func writeSource(t *testing.T, dir, name, src string) {
 	t.Helper()
 	p := filepath.Join(dir, name)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -88,7 +88,7 @@ func serve(t *testing.T, h *Handler, next caddyhttp.Handler, r *http.Request) *h
 
 func TestSimpleStringResponse(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "hello.star", `
+	writeSource(t, dir, "hello.star", `
 def respond(request):
     return "Hello, " + request.args.get("name", "World") + "!"
 `)
@@ -109,7 +109,7 @@ def respond(request):
 
 func TestExtensionInferred(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "page.star", `def respond(req): return "page"`)
+	writeSource(t, dir, "page.star", `def respond(req): return "page"`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/page", "", nil))
@@ -120,7 +120,7 @@ func TestExtensionInferred(t *testing.T) {
 
 func TestIndexResolution(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "index.star", `def respond(req): return "home"`)
+	writeSource(t, dir, "index.star", `def respond(req): return "home"`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/", "", nil))
@@ -129,7 +129,7 @@ func TestIndexResolution(t *testing.T) {
 	}
 }
 
-func TestPassThroughWhenNoScript(t *testing.T) {
+func TestPassThroughWhenNoView(t *testing.T) {
 	dir := t.TempDir()
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
@@ -154,7 +154,7 @@ func TestNonStarPassThrough(t *testing.T) {
 
 func TestResponseObject(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "x.star", `
+	writeSource(t, dir, "x.star", `
 def respond(req):
     return Response(
         '{"ok": true}',
@@ -182,7 +182,7 @@ def respond(req):
 
 func TestTupleReturn(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "x.star", `def respond(req): return ("nope", 404)`)
+	writeSource(t, dir, "x.star", `def respond(req): return ("nope", 404)`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/x.star", "", nil))
@@ -193,7 +193,7 @@ func TestTupleReturn(t *testing.T) {
 
 func TestTupleWithHeaders(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "x.star", `def respond(req): return ("ok", 200, {"X-A": "1"})`)
+	writeSource(t, dir, "x.star", `def respond(req): return ("ok", 200, {"X-A": "1"})`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/x.star", "", nil))
@@ -204,7 +204,7 @@ func TestTupleWithHeaders(t *testing.T) {
 
 func TestRedirect(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "r.star", `def respond(req): return redirect("/elsewhere", status=301)`)
+	writeSource(t, dir, "r.star", `def respond(req): return redirect("/elsewhere", status=301)`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/r.star", "", nil))
@@ -218,7 +218,7 @@ func TestRedirect(t *testing.T) {
 
 func TestAbort(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "a.star", `def respond(req): abort(403, "denied")`)
+	writeSource(t, dir, "a.star", `def respond(req): abort(403, "denied")`)
 	h, next := newHandler(t, dir)
 	w := httptest.NewRecorder()
 	err := h.ServeHTTP(w, makeRequest("GET", "/a.star", "", nil), caddyhttp.HandlerFunc(next.ServeHTTP))
@@ -236,7 +236,7 @@ func TestAbort(t *testing.T) {
 
 func TestPlaceholder(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "p.star", `
+	writeSource(t, dir, "p.star", `
 def respond(req):
     return placeholder("http.request.host") + " / " + ph("{http.request.method}")
 `)
@@ -250,7 +250,7 @@ def respond(req):
 
 func TestRequestHeadersAndCookies(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "h.star", `
+	writeSource(t, dir, "h.star", `
 def respond(req):
     ua = req.headers.get("user-agent", "")
     sid = req.cookies.get("sid", "")
@@ -269,7 +269,7 @@ def respond(req):
 
 func TestForm(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "f.star", `
+	writeSource(t, dir, "f.star", `
 def respond(req):
     return req.form.get("a", "") + "," + req.form.get("b", "")
 `)
@@ -285,7 +285,7 @@ def respond(req):
 
 func TestJSONBody(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "j.star", `
+	writeSource(t, dir, "j.star", `
 def respond(req):
     body = req.json()
     return Response(
@@ -305,7 +305,7 @@ def respond(req):
 
 func TestGetlist(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "g.star", `
+	writeSource(t, dir, "g.star", `
 def respond(req):
     return ",".join(req.args.getlist("x"))
 `)
@@ -320,7 +320,7 @@ def respond(req):
 func TestPathTraversalRejected(t *testing.T) {
 	dir := t.TempDir()
 	outside := t.TempDir()
-	writeScript(t, outside, "secret.star", `def respond(req): return "leaked"`)
+	writeSource(t, outside, "secret.star", `def respond(req): return "leaked"`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/../"+filepath.Base(outside)+"/secret.star", "", nil))
@@ -331,7 +331,7 @@ func TestPathTraversalRejected(t *testing.T) {
 
 func TestCaching(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "c.star", `def respond(req): return "v1"`)
+	writeSource(t, dir, "c.star", `def respond(req): return "v1"`)
 	h, next := newHandler(t, dir)
 
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
@@ -349,7 +349,7 @@ func TestCaching(t *testing.T) {
 
 func TestMaxBodySizeDefault(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
+	writeSource(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
 	h, next := newHandler(t, dir)
 	// 1 KiB POST: well under default 4 MiB.
 	body := strings.Repeat("a", 1024)
@@ -364,7 +364,7 @@ func TestMaxBodySizeDefault(t *testing.T) {
 
 func TestMaxBodySizeExceeded(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
+	writeSource(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
 	h, next := newHandler(t, dir)
 	h.MaxBodySize = 16
 	headers := http.Header{}
@@ -383,7 +383,7 @@ func TestMaxBodySizeExceeded(t *testing.T) {
 
 func TestMaxBodySizeUnlimited(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
+	writeSource(t, dir, "b.star", `def respond(req): return str(len(req.data))`)
 	h, next := newHandler(t, dir)
 	h.MaxBodySize = -1
 	headers := http.Header{}
@@ -398,7 +398,7 @@ func TestMaxBodySizeUnlimited(t *testing.T) {
 
 func TestEscapeAllChars(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "e.star", `def respond(req): return escape("<a href=\"x\">'&'</a>")`)
+	writeSource(t, dir, "e.star", `def respond(req): return escape("<a href=\"x\">'&'</a>")`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/e.star", "", nil))
@@ -413,7 +413,7 @@ func TestEscapeAllChars(t *testing.T) {
 
 func TestEscapeIdempotentOnMarkup(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "e.star", `def respond(req): return escape(escape("<x>"))`)
+	writeSource(t, dir, "e.star", `def respond(req): return escape(escape("<x>"))`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/e.star", "", nil))
@@ -424,7 +424,7 @@ func TestEscapeIdempotentOnMarkup(t *testing.T) {
 
 func TestHtmlFormatter(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "h.star", `
+	writeSource(t, dir, "h.star", `
 def respond(req):
     return html(
         "<p>Hello, {name}! You said: {msg}</p>",
@@ -443,7 +443,7 @@ def respond(req):
 
 func TestHtmlPassesMarkupThrough(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "h.star", `
+	writeSource(t, dir, "h.star", `
 def respond(req):
     safe = markup("<b>bold</b>")
     user = "<i>italic</i>"
@@ -460,7 +460,7 @@ def respond(req):
 
 func TestHtmlComposes(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "h.star", `
+	writeSource(t, dir, "h.star", `
 def respond(req):
     inner = html("<p>{x}</p>", x="<a>")
     return html("<div>{i}</div>", i=inner)
@@ -476,7 +476,7 @@ def respond(req):
 
 func TestSetCookieSimple(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "c.star", `
+	writeSource(t, dir, "c.star", `
 def respond(req):
     r = Response("ok")
     r.set_cookie("sid", "abc123")
@@ -492,7 +492,7 @@ def respond(req):
 
 func TestSetCookieAttributes(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "c.star", `
+	writeSource(t, dir, "c.star", `
 def respond(req):
     r = Response("ok")
     r.set_cookie("sid", "abc",
@@ -518,7 +518,7 @@ def respond(req):
 
 func TestSetCookieMultiple(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "c.star", `
+	writeSource(t, dir, "c.star", `
 def respond(req):
     r = Response("ok")
     r.set_cookie("a", "1")
@@ -542,7 +542,7 @@ def respond(req):
 
 func TestSetCookieExpires(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "c.star", `
+	writeSource(t, dir, "c.star", `
 def respond(req):
     r = Response("ok")
     r.set_cookie("sid", "abc", expires=time.from_timestamp(0))
@@ -559,7 +559,7 @@ def respond(req):
 
 func TestQuoteUnquoteRoundtrip(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `
+	writeSource(t, dir, "u.star", `
 def respond(req):
     s = "a b/c?d=&%"
     q = quote(s)
@@ -576,7 +576,7 @@ def respond(req):
 
 func TestUrlencodeDict(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `def respond(req): return urlencode({"q": "hello world", "lang": "en"})`)
+	writeSource(t, dir, "u.star", `def respond(req): return urlencode({"q": "hello world", "lang": "en"})`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/u.star", "", nil))
@@ -588,7 +588,7 @@ func TestUrlencodeDict(t *testing.T) {
 
 func TestUrlencodeMultiDict(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `def respond(req): return urlencode(req.args)`)
+	writeSource(t, dir, "u.star", `def respond(req): return urlencode(req.args)`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/u.star?x=1&x=2&y=hello+world", "", nil))
@@ -600,7 +600,7 @@ func TestUrlencodeMultiDict(t *testing.T) {
 
 func TestUrlencodeListValues(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `def respond(req): return urlencode({"x": [1, 2, 3], "y": "z"})`)
+	writeSource(t, dir, "u.star", `def respond(req): return urlencode({"x": [1, 2, 3], "y": "z"})`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/u.star", "", nil))
@@ -637,7 +637,7 @@ func makeMultipart(t *testing.T, fields [][2]string, files [][3]string) (string,
 
 func TestFilesSingle(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `
+	writeSource(t, dir, "u.star", `
 def respond(req):
     f = req.files.get("upload")
     return f.filename + "|" + str(f.size) + "|" + str(f.read())
@@ -658,7 +658,7 @@ def respond(req):
 
 func TestFilesMultiple(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `
+	writeSource(t, dir, "u.star", `
 def respond(req):
     fs = req.files.getlist("doc")
     parts = [f.filename + "=" + str(f.read()) for f in fs]
@@ -682,7 +682,7 @@ def respond(req):
 
 func TestFilesAndFormFields(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `
+	writeSource(t, dir, "u.star", `
 def respond(req):
     f = req.files.get("avatar")
     return req.form.get("name", "?") + ":" + f.filename + ":" + str(f.read())
@@ -702,7 +702,7 @@ def respond(req):
 
 func TestFilesEmptyOnNonMultipart(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `def respond(req): return str(len(req.files))`)
+	writeSource(t, dir, "u.star", `def respond(req): return str(len(req.files))`)
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 		makeRequest("GET", "/u.star", "", nil))
@@ -713,7 +713,7 @@ func TestFilesEmptyOnNonMultipart(t *testing.T) {
 
 func TestFilesContentType(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "u.star", `def respond(req): return req.files.get("f").content_type`)
+	writeSource(t, dir, "u.star", `def respond(req): return req.files.get("f").content_type`)
 	// Manually craft so we can set the part's Content-Type.
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -761,7 +761,7 @@ func newSessionHandler(t *testing.T, dir string) (*Handler, *passThroughCounter)
 
 func TestSessionUnconfiguredErrors(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "s.star", `def respond(req): return str(req.session)`)
+	writeSource(t, dir, "s.star", `def respond(req): return str(req.session)`)
 	h, next := newHandler(t, dir) // no secret_key
 	w := httptest.NewRecorder()
 	err := h.ServeHTTP(w, makeRequest("GET", "/s.star", "", nil), caddyhttp.HandlerFunc(next.ServeHTTP))
@@ -775,7 +775,7 @@ func TestSessionUnconfiguredErrors(t *testing.T) {
 
 func TestSessionEmptyDoesNotSetCookie(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "s.star", `
+	writeSource(t, dir, "s.star", `
 def respond(req):
     _ = req.session  # touch but don't modify
     return "ok"
@@ -790,7 +790,7 @@ def respond(req):
 
 func TestSessionWriteSetsCookie(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "s.star", `
+	writeSource(t, dir, "s.star", `
 def respond(req):
     req.session["user"] = "alice"
     req.session["count"] = 1
@@ -817,7 +817,7 @@ def respond(req):
 
 func TestSessionRoundtrip(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "s.star", `
+	writeSource(t, dir, "s.star", `
 def respond(req):
     if "name" not in req.session:
         req.session["name"] = req.args.get("set", "")
@@ -853,7 +853,7 @@ def respond(req):
 
 func TestSessionTamperedRejected(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "s.star", `def respond(req): return "name=" + str(req.session.get("name", "none"))`)
+	writeSource(t, dir, "s.star", `def respond(req): return "name=" + str(req.session.get("name", "none"))`)
 	h, next := newSessionHandler(t, dir)
 	headers := http.Header{}
 	// Forged cookie: valid base64, wrong signature.
@@ -867,7 +867,7 @@ func TestSessionTamperedRejected(t *testing.T) {
 
 func TestSessionClearDeletesCookie(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "s.star", `
+	writeSource(t, dir, "s.star", `
 def respond(req):
     req.session.clear()
     return "cleared"
@@ -894,13 +894,13 @@ def respond(req):
 func TestLoadStaysInsideRoot(t *testing.T) {
 	dir := t.TempDir()
 	outside := t.TempDir()
-	writeScript(t, outside, "secret.star", `secret = "leaked"`)
+	writeSource(t, outside, "secret.star", `secret = "leaked"`)
 
-	writeScript(t, dir, "ok.star", `
+	writeSource(t, dir, "ok.star", `
 load("helper.star", "greet")
 def respond(req): return greet("there")
 `)
-	writeScript(t, dir, "helper.star", `def greet(s): return "hi " + s`)
+	writeSource(t, dir, "helper.star", `def greet(s): return "hi " + s`)
 
 	h, next := newHandler(t, dir)
 	w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
@@ -914,7 +914,7 @@ def respond(req): return greet("there")
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeScript(t, dir, "bad.star", fmt.Sprintf(`
+	writeSource(t, dir, "bad.star", fmt.Sprintf(`
 load(%q, "secret")
 def respond(req): return secret
 `, relPath))
@@ -927,8 +927,8 @@ def respond(req): return secret
 	if he.StatusCode != 500 {
 		t.Errorf("status = %d, want 500", he.StatusCode)
 	}
-	if !strings.Contains(he.Error(), "escapes script root") {
-		t.Errorf("error = %q, want contains 'escapes script root'", he.Error())
+	if !strings.Contains(he.Error(), "escapes view root") {
+		t.Errorf("error = %q, want contains 'escapes view root'", he.Error())
 	}
 }
 
@@ -969,7 +969,7 @@ func TestInvalidStatusRejected(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			writeScript(t, dir, "x.star", tc.body)
+			writeSource(t, dir, "x.star", tc.body)
 			h, next := newHandler(t, dir)
 			w := httptest.NewRecorder()
 			err := h.ServeHTTP(w, makeRequest("GET", "/x.star", "", nil), caddyhttp.HandlerFunc(next.ServeHTTP))
@@ -990,7 +990,7 @@ func TestInvalidStatusRejected(t *testing.T) {
 func TestValidEdgeStatusesAccepted(t *testing.T) {
 	dir := t.TempDir()
 	for _, status := range []int{100, 200, 418, 599, 999} {
-		writeScript(t, dir, "x.star", fmt.Sprintf(`def respond(req): return ("x", %d)`, status))
+		writeSource(t, dir, "x.star", fmt.Sprintf(`def respond(req): return ("x", %d)`, status))
 		h, next := newHandler(t, dir)
 		w := serve(t, h, caddyhttp.HandlerFunc(next.ServeHTTP),
 			makeRequest("GET", "/x.star", "", nil))
@@ -1002,7 +1002,7 @@ func TestValidEdgeStatusesAccepted(t *testing.T) {
 
 func TestMissingEntrypoint(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "broken.star", `x = 1`)
+	writeSource(t, dir, "broken.star", `x = 1`)
 	h, next := newHandler(t, dir)
 	w := httptest.NewRecorder()
 	err := h.ServeHTTP(w, makeRequest("GET", "/broken.star", "", nil), caddyhttp.HandlerFunc(next.ServeHTTP))
