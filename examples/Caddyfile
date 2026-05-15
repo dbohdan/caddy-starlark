@@ -2,13 +2,23 @@
 	order starlark before file_server
 }
 
+(starlark) {
+	starlark {
+		root examples/handlers
+		# Never use this value in production.
+		secret_key 8ktd0Znpg4F0PqhIEnTOi0wdBBvRnFyM
+	}
+}
+
 :8080 {
-	route {
-		starlark {
-			root ./examples/views
-			# Never use this value in production.
-			secret_key 8ktd0Znpg4F0PqhIEnTOi0wdBBvRnFyM
-		}
-		file_server
+	log
+
+	root examples/
+	import starlark
+	file_server
+
+	handle_errors {
+		rewrite * /error.star
+		import starlark
 	}
 }

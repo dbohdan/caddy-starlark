@@ -407,6 +407,7 @@ See the [`examples/`](./examples) directory:
 
 - [`examples/Caddyfile`](./examples/Caddyfile) — server config
 - [`examples/views/index.star`](./examples/views/index.star) — HTML home page
+- [`examples/views/error.star`](./examples/views/error.star) — Error page translated from a [template example](https://dbohdan.com/caddy#error-page)
 - [`examples/views/api/echo.star`](./examples/views/api/echo.star) — JSON echo endpoint
 - [`examples/views/api/info.star`](./examples/views/api/info.star) — placeholder demo
 - [`examples/views/api/png.star`](./examples/views/api/png.star) — generates a PNG image dynamically (binary response)
