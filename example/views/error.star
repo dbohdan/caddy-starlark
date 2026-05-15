@@ -1,16 +1,16 @@
 def respond(request):
-    code = placeholder("http.error.status_code")
+    code = int(placeholder("http.error.status_code"))
     text = placeholder("http.error.status_text")
     message = placeholder("http.error.message")
 
     if message.strip() != "":
         if not message.endswith("."):
             message += "."
-    elif code == "403":
+    elif code == 403:
         message = "You don't have permission to access this resource."
-    elif code == "404":
+    elif code == 404:
         message = "The requested URL was not found on this server."
-    elif code == "500":
+    elif code == 500:
         message = "An internal server error has occurred."
     else:
         message = text + "."
@@ -46,4 +46,4 @@ def respond(request):
         text=text,
         message=message,
         url=request.url,
-    ), int(code)
+    ), code
