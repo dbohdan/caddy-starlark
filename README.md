@@ -13,6 +13,8 @@ caddy-starlark was originally designed and implemented by Claude Opus 4.7 via Cl
 
 ## Install
 
+caddy-starlark requires Go 1.25 or later.
+
 Build a Caddy binary that includes this module with [xcaddy](https://github.com/caddyserver/xcaddy):
 
 ```sh
