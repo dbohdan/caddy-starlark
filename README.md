@@ -403,19 +403,20 @@ def respond(req):
 A `time` value supports `.year`, `.month`, `.day`, `.hour`, `.minute`, `.second`, `.nanosecond`, `.unix`, `.unix_nano`, `.format(layout)`, and `.in_location(tz)`.
 It also can perform arithmetic with durations like `time.parse_duration("5m")`.
 
-## A complete example
+## An example site
 
-See the [`examples/`](./examples) directory:
+The [`examples/`](examples/) directory contains a complete example site.
+It is used for both documentation and testing.
 
-- [`examples/Caddyfile`](./examples/Caddyfile): server config
-- [`examples/views/index.star`](./examples/views/index.star): HTML home page
-- [`examples/views/error.star`](./examples/views/error.star): error page translated from a [template example](https://dbohdan.com/caddy#error-page)
-- [`examples/views/echo.star`](./examples/views/echo.star): JSON echo endpoint
-- [`examples/views/info.star`](./examples/views/info.star): placeholder demo
-- [`examples/views/png.star`](./examples/views/png.star): generates a PNG image dynamically (binary response)
-- [`examples/views/now.star`](./examples/views/now.star): current date and time via both placeholders and the `time` module
-- [`examples/views/upload.star`](./examples/views/upload.star): file upload using `request.files`
-- [`examples/views/counter.star`](./examples/views/counter.star): per-visitor visit counter using a signed-cookie session
+- [`examples/Caddyfile`](examples/Caddyfile): server config
+- [`examples/views/index.star`](examples/views/index.star): HTML home page
+- [`examples/views/error.star`](examples/views/error.star): error page ported and exhanced from a [template example](https://dbohdan.com/caddy#error-page)
+- [`examples/views/echo.star`](examples/views/echo.star): JSON echo endpoint
+- [`examples/views/info.star`](examples/views/info.star): placeholder demo
+- [`examples/views/png.star`](examples/views/png.star): generates a PNG image dynamically (binary response)
+- [`examples/views/now.star`](examples/views/now.star): current date and time via both placeholders and the `time` module
+- [`examples/views/upload.star`](examples/views/upload.star): file upload using `request.files`
+- [`examples/views/counter.star`](examples/views/counter.star): per-visitor visit counter using a signed-cookie session
 
 ## Tests
 

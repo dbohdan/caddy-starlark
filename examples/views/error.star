@@ -46,4 +46,4 @@ def respond(request):
         text=text,
         message=message,
         url=request.url,
-    ), code
+    ), int(code)
