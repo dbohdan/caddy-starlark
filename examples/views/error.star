@@ -1,8 +1,12 @@
 def respond(request):
     code = placeholder("http.error.status_code")
     text = placeholder("http.error.status_text")
+    message = placeholder("http.error.message")
 
-    if code == "403":
+    if message.strip() != "":
+        if not message.endswith("."):
+            message += "."
+    elif code == "403":
         message = "You don't have permission to access this resource."
     elif code == "404":
         message = "The requested URL was not found on this server."
