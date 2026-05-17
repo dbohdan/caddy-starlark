@@ -218,6 +218,7 @@ def respond(req):
 ```
 
 `html()` escapes each kwarg, so the request `/?name=<script>alert(1)</script>` produces `<p>Hello, &lt;script&gt;alert(1)&lt;/script&gt;! ...</p>`.
+This is similar to [string formatting in MarkupSafe](https://markupsafe.palletsprojects.com/formatting/).
 
 If you need to pass already-trusted HTML through, wrap it with `markup()`:
 
